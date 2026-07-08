@@ -89,7 +89,7 @@ pub fn setupDaemon() void {
         std.process.exit(1);
     }
 
-    var c = a.create(Client) catch return;
+    const c = a.create(Client) catch return;
     c.* = Client.init(harness_alloc, url, .{});
     harness_client = c;
 }
