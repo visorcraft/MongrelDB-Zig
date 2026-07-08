@@ -403,9 +403,9 @@ pub const Client = struct {
             .max_append_size = 64 * 1024 * 1024,
         }) catch return error.Http;
 
-        const code: u10 = @intFromEnum(result.status);
+        const code: u16 = @intFromEnum(result.status);
         if (code < 200 or code >= 300) {
-            return mapStatus(code);
+            return mapStatus(@intCast(code));
         }
         return allocator.dupe(u8, response_body.items) catch error.OutOfMemory;
     }
@@ -417,7 +417,7 @@ pub const Client = struct {
 /// trips an unreachable/panic on a code the daemon might return (e.g. a 400
 /// validation error, a 500 engine error, or a redirect) — the `else` arms map
 /// any unmapped code to a sensible category instead of `@panic`-ing.
-fn mapStatus(code: u10) Error {
+fn mapStatus(code: u16) Error {
     return switch (code) {
         // 3xx redirections: the client does not follow them for these JSON
         // endpoints, so treat as a transport-level failure.
