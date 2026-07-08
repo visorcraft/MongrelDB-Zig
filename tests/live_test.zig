@@ -57,8 +57,7 @@ pub fn setupDaemon() void {
         std.process.exit(1);
     };
 
-    var arena = harness_alloc.create(std.heap.ArenaAllocator) catch return;
-    arena.* = std.heap.ArenaAllocator.init(harness_alloc);
+    var arena = std.heap.ArenaAllocator.init(harness_alloc);
     const a = arena.allocator();
 
     const data_dir = std.fs.cwd().makeOpenPath(std.fmt.allocPrint(a, "/tmp/mongreldb-zig-test-{d}", .{std.time.nanoTimestamp()}) catch return, .{}) catch return;
@@ -123,8 +122,9 @@ fn isExecutable(path: []const u8) bool {
     const file = std.fs.cwd().statFile(path) catch return false;
     if (file.kind != .file) return false;
     // Best-effort exec bit check on POSIX; ignore on other platforms.
+    // Zig 0.13's File.Stat dropped `.permission`, so use access(2) instead.
     if (builtin.os.tag != .windows) {
-        return (file.permission & 0o111) != 0;
+        std.posix.access(path, std.posix.X_OK) catch return false;
     }
     return true;
 }
@@ -162,7 +162,7 @@ fn readAll(a: Allocator, file: std.fs.File) ![]u8 {
 
 // ── Test helpers ─────────────────────────────────────────────────────────
 
-fn skipIfNoClient() void {
+fn skipIfNoClient() !void {
     setupDaemon();
     if (harness_client == null) return error.SkipZigTest;
 }
