@@ -196,14 +196,14 @@ fn mustPut(a: Allocator, table: []const u8, cells: []const Cell) !void {
 // ── Tests ────────────────────────────────────────────────────────────────
 
 test "health" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
     try testing.expect(try c.health(a));
 }
 
 test "createTableAndCount" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -214,7 +214,7 @@ test "createTableAndCount" {
 }
 
 test "putAndCountRoundTrip" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -234,7 +234,7 @@ test "putAndCountRoundTrip" {
 }
 
 test "queryByPK" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -255,7 +255,7 @@ test "queryByPK" {
 }
 
 test "queryRange" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -280,7 +280,7 @@ test "queryRange" {
 }
 
 test "transactionPutCommit" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -300,7 +300,7 @@ test "transactionPutCommit" {
 }
 
 test "deleteByPK" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -315,7 +315,7 @@ test "deleteByPK" {
 }
 
 test "sql" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -324,7 +324,7 @@ test "sql" {
 }
 
 test "schema" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -336,7 +336,7 @@ test "schema" {
 }
 
 test "schemaFor" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -357,7 +357,7 @@ test "schemaFor" {
 }
 
 test "tableNamesListsCreatedTable" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -372,7 +372,7 @@ test "tableNamesListsCreatedTable" {
 }
 
 test "errorOnNonexistentTable" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
@@ -382,7 +382,7 @@ test "errorOnNonexistentTable" {
 }
 
 test "errorTypeCarriesStatus" {
-    skipIfNoClient();
+    try skipIfNoClient();
     const a = harness_alloc;
     const c = harness_client.?;
 
