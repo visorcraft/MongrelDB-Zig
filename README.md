@@ -21,12 +21,25 @@ No external dependencies — built on the standard library `std.http.Client`. Th
 
 ## What It Provides
 
-- **Typed CRUD** over the Kit transaction endpoint: `put`, `delete`, and `deleteByPk`, all with optional idempotency keys for safe retries.
+- **Typed CRUD** over the Kit transaction endpoint: `put` (with optional idempotency keys for safe retries) and `deleteByPk`, plus batched `put`/`delete`/`deleteByPk` and `upsert`-style insert-or-update via `sql` when needed.
 - **Fluent query builder** that pushes conditions down to the engine's specialized indexes for sub-millisecond lookups: bitmap equality/IN, learned-range, null checks, FM-index full-text search, HNSW vector similarity (`ann`), and sparse vector match. Friendly aliases (`column` → `column_id`, `min`/`max` → `lo`/`hi`) are translated to the server's on-wire keys.
 - **Idempotent batch transactions** — operations staged locally and committed atomically, with the engine enforcing unique, foreign-key, and check constraints at commit time. Idempotency keys return the original response on duplicate commits, even after a crash.
 - **Full SQL access** through the DataFusion-backed `/sql` endpoint: recursive CTEs, window functions, `CREATE TABLE AS SELECT`, materialized views, and multi-statement execution.
 - **Schema management**: typed table creation, full schema catalog, and per-table descriptors.
+- **User/role/credentials management** via SQL: Argon2id-hashed catalog users, roles, and `GRANT`/`REVOKE` table-level permissions, all executed through `sql`.
+- **Maintenance**: compaction (all tables or per-table) is available via the low-level `doPost` helper.
 - **Typed errors**: `error.Auth` (401/403), `error.NotFound` (404), `error.Conflict` (409), `error.Query` (everything else non-2xx), `error.Http` (transport), and `error.Json` (malformed response) — a single typed error set you match with Zig's `catch`/`|err| switch (err)`.
+
+## Examples
+
+Task-focused, commented guides live in [`docs/`](docs):
+
+- [Quickstart](docs/quickstart.md) — install, start the daemon, write and run a complete program.
+- [Transactions](docs/transactions.md) — batch commits, idempotency keys, constraint handling.
+- [Queries](docs/queries.md) — every native condition type and the index it pushes down to.
+- [SQL](docs/sql.md) — recursive CTEs, window functions, advanced SQL.
+- [Authentication](docs/auth.md) — Bearer token, HTTP Basic, and open modes.
+- [Errors](docs/errors.md) — the typed error set and recovery patterns.
 
 ## Quick Example
 
@@ -173,6 +186,23 @@ _ = try db.sql(allocator,
 The `/sql` endpoint streams Arrow IPC for SELECTs. `sql` therefore returns
 decoded rows only when the body is JSON; for IPC-streaming or non-row
 statements it returns an empty slice and no error.
+
+## User & role management
+
+User, role, and permission management is performed through SQL against the
+daemon's catalog. Passwords are Argon2id-hashed server-side.
+
+```zig
+_ = try db.sql(allocator, "CREATE USER admin WITH PASSWORD 's3cret-pw'");
+_ = try db.sql(allocator, "ALTER USER admin SET ADMIN TRUE");
+
+_ = try db.sql(allocator, "CREATE ROLE analyst");
+_ = try db.sql(allocator, "GRANT select ON orders TO analyst"); // table-level permission
+_ = try db.sql(allocator, "GRANT analyst TO alice");
+
+_ = try db.sql(allocator, "SELECT username FROM catalog.users"); // list users
+_ = try db.sql(allocator, "SELECT name FROM catalog.roles");     // list roles
+```
 
 ## Error handling
 
