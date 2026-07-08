@@ -213,9 +213,13 @@ pub const Client = struct {
     /// commits. Returns the per-operation result object (the first element of
     /// the server's results array).
     pub fn put(self: *Client, allocator: Allocator, table: []const u8, cells: []const Cell, idempotency_key: []const u8) Error!Value {
+        var inner = ObjectMap.init(allocator);
+        inner.put("table", .{ .string = table }) catch return error.OutOfMemory;
+        inner.put("cells", .{ .array = try flattenCells(allocator, cells) }) catch return error.OutOfMemory;
+        inner.put("returning", .{ .bool = false }) catch return error.OutOfMemory;
+
         var op = ObjectMap.init(allocator);
-        op.put("table", .{ .string = table }) catch return error.OutOfMemory;
-        op.put("cells", .{ .array = try flattenCells(allocator, cells) }) catch return error.OutOfMemory;
+        op.put("put", .{ .object = inner }) catch return error.OutOfMemory;
 
         var ops = Array.init(allocator);
         ops.append(.{ .object = op }) catch return error.OutOfMemory;
@@ -227,9 +231,12 @@ pub const Client = struct {
 
     /// `deleteByPk` removes a row by its primary-key value.
     pub fn deleteByPk(self: *Client, allocator: Allocator, table: []const u8, pk: Value) Error!void {
+        var inner = ObjectMap.init(allocator);
+        inner.put("table", .{ .string = table }) catch return error.OutOfMemory;
+        inner.put("pk", pk) catch return error.OutOfMemory;
+
         var op = ObjectMap.init(allocator);
-        op.put("table", .{ .string = table }) catch return error.OutOfMemory;
-        op.put("pk", pk) catch return error.OutOfMemory;
+        op.put("delete_by_pk", .{ .object = inner }) catch return error.OutOfMemory;
 
         var ops = Array.init(allocator);
         ops.append(.{ .object = op }) catch return error.OutOfMemory;
@@ -405,7 +412,7 @@ pub const Client = struct {
 
         const code: u16 = @intFromEnum(result.status);
         if (code < 200 or code >= 300) {
-            std.debug.print("DEBUG: status={d} body={s}\n", .{code, response_body.items[0..@min(response_body.items.len, 200)]}); return mapStatus(@intCast(code));
+            return mapStatus(@intCast(code));
         }
         return allocator.dupe(u8, response_body.items) catch error.OutOfMemory;
     }
