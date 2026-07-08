@@ -22,15 +22,34 @@ const Value = mongreldb.Value;
 const ObjectMap = mongreldb.ObjectMap;
 
 // Shared harness state, populated by setupDaemon.
+//
+// All harness allocations (the daemon `Child`, the shared `Client` and its
+// HTTP connection pool, env-owned strings, etc.) are routed through a single
+// `test_arena` backed by `testing.allocator`. `teardownDaemon` deinit's the
+// arena, which returns every byte to the backing GPA so the leak-detecting
+// `testing.allocator` reports a clean balance at process exit.
 var harness_client: ?*Client = null;
-var harness_alloc: Allocator = testing.allocator;
+var test_arena: std.heap.ArenaAllocator = undefined;
+var test_arena_inited: bool = false;
+var harness_alloc: Allocator = undefined;
 var server_child: ?*std.process.Child = null;
-var server_arena: ?std.heap.ArenaAllocator = null;
+
+/// `ensureArena` lazily initializes the global test arena on first use and
+/// points `harness_alloc` at it. Called from `setupDaemon` (via every test's
+/// `skipIfNoClient`) before any harness allocation, so `harness_alloc` is
+/// always valid by the time tests use it.
+fn ensureArena() void {
+    if (test_arena_inited) return;
+    test_arena = std.heap.ArenaAllocator.init(testing.allocator);
+    harness_alloc = test_arena.allocator();
+    test_arena_inited = true;
+}
 
 // ── Daemon lifecycle ─────────────────────────────────────────────────────
 
 pub fn setupDaemon() void {
     if (harness_client != null) return;
+    ensureArena();
 
     // If a daemon is already running, connect to it directly.
     if (std.process.getEnvVarOwned(harness_alloc, "MONGRELDB_URL")) |existing| {
@@ -57,17 +76,13 @@ pub fn setupDaemon() void {
         std.process.exit(1);
     };
 
-    var arena = std.heap.ArenaAllocator.init(harness_alloc);
-    const a = arena.allocator();
-
-    const data_dir = std.fs.cwd().makeOpenPath(std.fmt.allocPrint(a, "/tmp/mongreldb-zig-test-{d}", .{std.time.nanoTimestamp()}) catch return, .{}) catch return;
+    const a = harness_alloc;
 
     const url = std.fmt.allocPrint(a, "http://127.0.0.1:{d}", .{port}) catch return;
     const port_str = std.fmt.allocPrint(a, "{d}", .{port}) catch return;
     const data_path = std.fmt.allocPrint(a, "/tmp/mongreldb-zig-test-{d}", .{std.time.nanoTimestamp()}) catch return;
-    _ = data_dir;
 
-    // Create the data dir fresh (makeOpenPath above opens it; we just need the path on disk).
+    // Create the data dir fresh on disk for the daemon's --data path.
     std.fs.cwd().makePath(data_path) catch {};
 
     var child = a.create(std.process.Child) catch return;
@@ -79,7 +94,6 @@ pub fn setupDaemon() void {
         return;
     };
     server_child = child;
-    server_arena = arena;
 
     if (!waitForHealth(a, url, 40 * std.time.ns_per_s)) {
         const stderr = if (child.stderr) |f| readAll(a, f) catch "" else "";
@@ -96,9 +110,14 @@ pub fn setupDaemon() void {
 fn teardownDaemon() void {
     if (server_child) |child| {
         _ = child.kill() catch {};
+        server_child = null;
     }
-    if (server_arena) |arena| {
-        arena.deinit();
+    // Reclaim every harness allocation (shared Client + its HTTP connection
+    // pool, daemon Child, env strings, etc.) back to the backing GPA.
+    if (test_arena_inited) {
+        test_arena.deinit();
+        test_arena_inited = false;
+        harness_client = null;
     }
 }
 
