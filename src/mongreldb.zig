@@ -405,7 +405,7 @@ pub const Client = struct {
 
         const code: u16 = @intFromEnum(result.status);
         if (code < 200 or code >= 300) {
-            return mapStatus(@intCast(code));
+            std.debug.print("DEBUG: status={d} body={s}\n", .{code, response_body.items[0..@min(response_body.items.len, 200)]}); return mapStatus(@intCast(code));
         }
         return allocator.dupe(u8, response_body.items) catch error.OutOfMemory;
     }
