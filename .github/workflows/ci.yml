@@ -40,7 +40,7 @@ jobs:
     name: Live integration (against mongreldb-server)
     runs-on: ubuntu-latest
     env:
-      SERVER_VERSION: '0.43.3'
+      SERVER_VERSION: '0.44.1'
       MONGRELDB_URL: http://127.0.0.1:8453
     steps:
       - name: Checkout
