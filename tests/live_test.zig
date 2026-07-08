@@ -25,9 +25,12 @@ const ObjectMap = mongreldb.ObjectMap;
 //
 // All harness allocations (the daemon `Child`, the shared `Client` and its
 // HTTP connection pool, env-owned strings, etc.) are routed through a single
-// `test_arena` backed by `testing.allocator`. `teardownDaemon` deinit's the
-// arena, which returns every byte to the backing GPA so the leak-detecting
-// `testing.allocator` reports a clean balance at process exit.
+// `test_arena` backed by `std.heap.page_allocator` rather than
+// `testing.allocator`. The Zig test runner has no teardown hook, so the
+// arena's bulk-free (in `teardownDaemon`) never actually runs; backing it
+// with the non-leak-checking page_allocator keeps `testing.allocator`'s
+// exit-time leak detector from reporting every harness allocation as leaked.
+// The OS reclaims the pages when the test process exits.
 var harness_client: ?*Client = null;
 var test_arena: std.heap.ArenaAllocator = undefined;
 var test_arena_inited: bool = false;
@@ -40,7 +43,7 @@ var server_child: ?*std.process.Child = null;
 /// always valid by the time tests use it.
 fn ensureArena() void {
     if (test_arena_inited) return;
-    test_arena = std.heap.ArenaAllocator.init(testing.allocator);
+    test_arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     harness_alloc = test_arena.allocator();
     test_arena_inited = true;
 }
