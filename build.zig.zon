@@ -1,0 +1,20 @@
+.{
+    .name = .mongreldb,
+    .version = "0.1.0",
+    .fingerprint = 0x6d6f6e6772656c64,
+    .minimum_zig_version = "0.13.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "LICENSE",
+        "README.md",
+        "src",
+        "tests",
+    },
+    .license = "MIT OR Apache-2.0",
+    .description = "Pure-Zig HTTP client for MongrelDB.",
+    .homepage = "https://github.com/visorcraft/MongrelDB-Zig",
+    .documentation = "https://github.com/visorcraft/MongrelDB-Zig#readme",
+    .authors = .{"Visorcraft"},
+}

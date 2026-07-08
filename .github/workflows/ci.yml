@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build & vet
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Print Zig version
+        run: zig version
+
+      - name: Build
+        run: zig build
+
+      - name: Run offline unit tests
+        # The test step runs the live suite; without a daemon every live test
+        # self-skips, so this still exercises all offline logic.
+        run: zig build test
+
+  live:
+    # Boots a real mongreldb-server and runs the live round-trip suite.
+    name: Live integration (against mongreldb-server)
+    runs-on: ubuntu-latest
+    env:
+      SERVER_VERSION: '0.43.3'
+      MONGRELDB_URL: http://127.0.0.1:8453
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Zig
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.13.0
+
+      - name: Print Zig version
+        run: zig version
+
+      - name: Build
+        run: zig build
+
+      - name: Cache mongreldb-server binary
+        id: server-cache
+        uses: actions/cache@v4
+        with:
+          path: bin/mongreldb-server
+          key: mongreldb-server-linux-x64-${{ env.SERVER_VERSION }}
+
+      - name: Download mongreldb-server
+        if: steps.server-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p bin
+          curl -fsSL -o bin/mongreldb-server \
+            "https://github.com/visorcraft/MongrelDB/releases/download/v${SERVER_VERSION}/mongreldb-server-linux-x64"
+          chmod +x bin/mongreldb-server
+          ./bin/mongreldb-server --help | head -n 1
+
+      - name: Start mongreldb-server
+        run: |
+          rm -rf /tmp/mongreldb-data
+          ./bin/mongreldb-server /tmp/mongreldb-data --port 8453 > /tmp/mongreldb-server.log 2>&1 &
+          echo $! > /tmp/mongreldb-server.pid
+          # Wait for the daemon to become healthy (max ~30s).
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8453/health >/dev/null 2>&1; then
+              echo "mongreldb-server is healthy"
+              break
+            fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8453/health >/dev/null || (cat /tmp/mongreldb-server.log && exit 1)
+
+      - name: Run live tests
+        run: zig build test
+
+      - name: Dump server log on failure
+        if: failure()
+        run: cat /tmp/mongreldb-server.log
+
+      - name: Stop mongreldb-server
+        if: always()
+        run: |
+          if [ -f /tmp/mongreldb-server.pid ]; then
+            kill "$(cat /tmp/mongreldb-server.pid)" 2>/dev/null || true
+          fi

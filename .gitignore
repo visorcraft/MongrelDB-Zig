@@ -1,0 +1,15 @@
+# Zig build output
+zig-cache/
+zig-out/
+
+# Logs (e.g. mongreldb-server output captured by tests)
+*.log
+
+# macOS
+.DS_Store
+
+# Workspace-local agent instruction files are never published.
+AGENTS.md
+CLAUDE.md
+.cursorrules
+.zcode/
