@@ -1,8 +1,8 @@
 # Transactions
 
 MongrelDB commits every write through a single atomic transaction endpoint
-(`POST /kit/txn`). This guide covers the two ways to use it — a one-shot
-single op, and a staged batch — plus idempotency keys for safe retries, typed
+(`POST /kit/txn`). This guide covers the two ways to use it - a one-shot
+single op, and a staged batch - plus idempotency keys for safe retries, typed
 constraint-violation handling, and rollback.
 
 The engine enforces `UNIQUE`, foreign-key, check, and trigger constraints at
@@ -99,7 +99,7 @@ Rules for keys:
 
 - Any non-empty string works. Prefer content-derived, globally-unique values
   (e.g. `"charge:42"`).
-- The empty string disables idempotency — a retry will commit again.
+- The empty string disables idempotency - a retry will commit again.
 - The key scopes the **entire batch**, not individual ops. Reuse the exact
   same ops and key together when retrying.
 
@@ -114,7 +114,7 @@ fn commitWithRetry(db: *mongreldb.Client, build: anytype, key: []const u8) !void
         txn.commit(key) catch |err| switch (err) {
             error.Conflict, error.Auth => return err, // not transient
             else => {
-                // error.Query / error.Http — the idempotency key makes it safe
+                // error.Query / error.Http - the idempotency key makes it safe
                 // to retry.
                 if (attempt == 2) return err;
                 std.time.sleep(@as(u64, 1 << attempt) * std.time.ns_per_s);
@@ -146,7 +146,7 @@ txn.commit("") catch |err| switch (err) {
 };
 ```
 
-The engine already discarded the entire batch — there is nothing to undo
+The engine already discarded the entire batch - there is nothing to undo
 server-side.
 
 ## Rollback after failure

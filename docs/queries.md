@@ -1,7 +1,7 @@
 # Queries
 
 The fluent `QueryBuilder` pushes conditions down to MongrelDB's native indexes
-for sub-millisecond lookups — bitmap, learned-range, FM-index full text, HNSW
+for sub-millisecond lookups - bitmap, learned-range, FM-index full text, HNSW
 vector similarity, and more. Each condition type maps to one specialized
 index; conditions are AND-ed together.
 
@@ -52,7 +52,7 @@ shape:
 `params` is an `ObjectMap`. Column references use the numeric **column id**,
 never the column name.
 
-### `pk` — exact primary-key match
+### `pk` - exact primary-key match
 
 The fastest lookup. `value` is the primary-key value.
 
@@ -62,7 +62,7 @@ try p.put("value", mongreldb.intValue(42));
 _ = try db.query(allocator, "orders").where("pk", p).execute();
 ```
 
-### `range` — integer range (learned-range index)
+### `range` - integer range (learned-range index)
 
 Inclusive bounds. Omit `lo` or `hi` for an open range.
 
@@ -80,7 +80,7 @@ try r2.put("min", mongreldb.intValue(100));
 _ = try db.query(allocator, "orders").where("range", r2).execute();
 ```
 
-### `range_f64` — float range with inclusive/exclusive control
+### `range_f64` - float range with inclusive/exclusive control
 
 Adds `lo_inclusive` / `hi_inclusive` flags (default inclusive).
 
@@ -94,7 +94,7 @@ try r.put("max_inclusive", mongreldb.boolValue(false)); // (100.0, 500.0]
 _ = try db.query(allocator, "orders").where("range_f64", r).execute();
 ```
 
-### `bitmap_eq` — equality on a bitmap-indexed column
+### `bitmap_eq` - equality on a bitmap-indexed column
 
 Best for low-cardinality columns (status, category, booleans).
 
@@ -105,7 +105,7 @@ try b.put("value", mongreldb.stringValue("Alice"));
 _ = try db.query(allocator, "orders").where("bitmap_eq", b).execute();
 ```
 
-### `bitmap_in` — IN predicate on a bitmap-indexed column
+### `bitmap_in` - IN predicate on a bitmap-indexed column
 
 Match any of a set of values.
 
@@ -121,7 +121,7 @@ try b.put("values", .{ .array = vals });
 _ = try db.query(allocator, "orders").where("bitmap_in", b).execute();
 ```
 
-### `is_null` / `is_not_null` — null checks
+### `is_null` / `is_not_null` - null checks
 
 ```zig
 var n = mongreldb.ObjectMap.init(allocator);
@@ -129,10 +129,10 @@ try n.put("column", mongreldb.intValue(3));
 _ = try db.query(allocator, "orders").where("is_null", n).execute();
 ```
 
-### `fm_contains` — full-text substring search (FM-index)
+### `fm_contains` - full-text substring search (FM-index)
 
 Substring match within a column. Use `pattern` (the server key) or the
-friendly `value` alias — both translate to `pattern` on the wire for FTS
+friendly `value` alias - both translate to `pattern` on the wire for FTS
 conditions.
 
 ```zig
@@ -148,7 +148,7 @@ try f2.put("value", mongreldb.stringValue("database"));
 _ = try db.query(allocator, "documents").where("fm_contains", f2).execute();
 ```
 
-### `ann` — dense vector similarity (HNSW)
+### `ann` - dense vector similarity (HNSW)
 
 Approximate nearest-neighbors over a vector column. `k` is the result count.
 
@@ -264,7 +264,7 @@ The `value` → `pattern` alias applies **only** to FTS conditions, because
 
 ## Putting it together
 
-A realistic combined lookup — bitmap equality + range + projection + limit +
+A realistic combined lookup - bitmap equality + range + projection + limit +
 truncation check:
 
 ```zig
@@ -291,4 +291,4 @@ fn topSpenders(db: *mongreldb.Client, customer: []const u8) !mongreldb.Array {
 ```
 
 For arbitrary predicates, joins, and aggregations that the native indexes do
-not cover, use SQL instead — see [sql.md](sql.md).
+not cover, use SQL instead - see [sql.md](sql.md).

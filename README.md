@@ -1,8 +1,8 @@
 # MongrelDB Zig Client
 
-MongrelDB Zig Client is the pure-Zig HTTP client for [MongrelDB](https://www.MongrelDB.com). It gives Zig applications a typed CRUD surface, a fluent query builder that pushes conditions down to MongrelDB's native indexes, idempotent batch transactions, full SQL access, and schema introspection — all over HTTP to a running `mongreldb-server` daemon.
+MongrelDB Zig Client is the pure-Zig HTTP client for [MongrelDB](https://www.MongrelDB.com). It gives Zig applications a typed CRUD surface, a fluent query builder that pushes conditions down to MongrelDB's native indexes, idempotent batch transactions, full SQL access, and schema introspection - all over HTTP to a running `mongreldb-server` daemon.
 
-No external dependencies — built on the standard library `std.http.Client`. The API mirrors the MongrelDB PHP and Go clients.
+No external dependencies - built on the standard library `std.http.Client`. The API mirrors the MongrelDB PHP and Go clients.
 
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-blue.svg)](#license)
 [![CI](https://github.com/visorcraft/MongrelDB-Zig/actions/workflows/ci.yml/badge.svg)](https://github.com/visorcraft/MongrelDB-Zig/actions/workflows/ci.yml)
@@ -23,23 +23,23 @@ No external dependencies — built on the standard library `std.http.Client`. Th
 
 - **Typed CRUD** over the Kit transaction endpoint: `put` (with optional idempotency keys for safe retries) and `deleteByPk`, plus batched `put`/`delete`/`deleteByPk` and `upsert`-style insert-or-update via `sql` when needed.
 - **Fluent query builder** that pushes conditions down to the engine's specialized indexes for sub-millisecond lookups: bitmap equality/IN, learned-range, null checks, FM-index full-text search, HNSW vector similarity (`ann`), and sparse vector match. Friendly aliases (`column` → `column_id`, `min`/`max` → `lo`/`hi`) are translated to the server's on-wire keys.
-- **Idempotent batch transactions** — operations staged locally and committed atomically, with the engine enforcing unique, foreign-key, and check constraints at commit time. Idempotency keys return the original response on duplicate commits, even after a crash.
+- **Idempotent batch transactions** - operations staged locally and committed atomically, with the engine enforcing unique, foreign-key, and check constraints at commit time. Idempotency keys return the original response on duplicate commits, even after a crash.
 - **Full SQL access** through the DataFusion-backed `/sql` endpoint: recursive CTEs, window functions, `CREATE TABLE AS SELECT`, materialized views, and multi-statement execution.
 - **Schema management**: typed table creation, full schema catalog, and per-table descriptors.
 - **User/role/credentials management** via SQL: Argon2id-hashed catalog users, roles, and `GRANT`/`REVOKE` table-level permissions, all executed through `sql`.
 - **Maintenance**: compaction (all tables or per-table) is available via the low-level `doPost` helper.
-- **Typed errors**: `error.Auth` (401/403), `error.NotFound` (404), `error.Conflict` (409), `error.Query` (everything else non-2xx), `error.Http` (transport), and `error.Json` (malformed response) — a single typed error set you match with Zig's `catch`/`|err| switch (err)`.
+- **Typed errors**: `error.Auth` (401/403), `error.NotFound` (404), `error.Conflict` (409), `error.Query` (everything else non-2xx), `error.Http` (transport), and `error.Json` (malformed response) - a single typed error set you match with Zig's `catch`/`|err| switch (err)`.
 
 ## Examples
 
 Task-focused, commented guides live in [`docs/`](docs):
 
-- [Quickstart](docs/quickstart.md) — install, start the daemon, write and run a complete program.
-- [Transactions](docs/transactions.md) — batch commits, idempotency keys, constraint handling.
-- [Queries](docs/queries.md) — every native condition type and the index it pushes down to.
-- [SQL](docs/sql.md) — recursive CTEs, window functions, advanced SQL.
-- [Authentication](docs/auth.md) — Bearer token, HTTP Basic, and open modes.
-- [Errors](docs/errors.md) — the typed error set and recovery patterns.
+- [Quickstart](docs/quickstart.md) - install, start the daemon, write and run a complete program.
+- [Transactions](docs/transactions.md) - batch commits, idempotency keys, constraint handling.
+- [Queries](docs/queries.md) - every native condition type and the index it pushes down to.
+- [SQL](docs/sql.md) - recursive CTEs, window functions, advanced SQL.
+- [Authentication](docs/auth.md) - Bearer token, HTTP Basic, and open modes.
+- [Errors](docs/errors.md) - the typed error set and recovery patterns.
 
 ## Quick Example
 
@@ -120,7 +120,7 @@ _ = try txn.put("orders", &.{.{ .id = 1, .value = mongreldb.intValue(10) }}, fal
 _ = try txn.put("orders", &.{.{ .id = 1, .value = mongreldb.intValue(11) }}, false);
 _ = try txn.deleteByPk("orders", mongreldb.intValue(2));
 
-// atomic — all or nothing
+// atomic - all or nothing
 const results = txn.commit("") catch |err| switch (err) {
     // A constraint violation rolls back every op.
     error.Conflict => {
@@ -131,7 +131,7 @@ const results = txn.commit("") catch |err| switch (err) {
 };
 _ = results;
 
-// Idempotent commit — safe to retry; the daemon returns the original response.
+// Idempotent commit - safe to retry; the daemon returns the original response.
 var txn2 = db.begin(allocator);
 _ = try txn2.put("orders", &.{.{ .id = 1, .value = mongreldb.intValue(20) }}, false);
 _ = try txn2.commit("order-20-create");
@@ -336,7 +336,7 @@ exe.root_module.addImport("mongreldb", mongreldb_dep.module("mongreldb"));
 Contributions are welcome. Please:
 
 1. Open an issue first for non-trivial changes.
-2. Add focused tests near your change — the suite must stay green.
+2. Add focused tests near your change - the suite must stay green.
 3. Keep the client dependency-free (standard library only).
 
 ## License

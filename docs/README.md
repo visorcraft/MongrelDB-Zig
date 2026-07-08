@@ -1,4 +1,4 @@
-# MongrelDB Zig Client — Guides
+# MongrelDB Zig Client - Guides
 
 Task-focused guides for the pure-Zig MongrelDB HTTP client. For the full API
 surface in one place, see the root [README](../README.md).

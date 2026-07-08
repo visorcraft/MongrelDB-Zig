@@ -86,7 +86,7 @@ _ = try txn.put("orders", &.{ .{ .id = 1, .value = .{ .integer = 10 } } }, false
 
 const results = txn.commit("order-batch-001") catch |err| switch (err) {
     error.Conflict => {
-        std.debug.print("batch rolled back — fix the data and retry\n", .{});
+        std.debug.print("batch rolled back - fix the data and retry\n", .{});
         return;
     },
     else => return err,
@@ -126,7 +126,7 @@ fn commitWithRetry(txn: *mongreldb.Transaction, key: []const u8) !mongreldb.Arra
     while (attempt < 3) : (attempt += 1) {
         return txn.commit(key) catch |err| switch (err) {
             error.Http => {
-                // transport error — safe to retry with the same key
+                // transport error - safe to retry with the same key
                 std.time.sleep(100 * std.time.ns_per_ms);
                 continue;
             },
@@ -156,5 +156,5 @@ one across function boundaries, make it obvious who calls `commit` or
 
 ## Next steps
 
-- [transactions.md](transactions.md) — atomic batches and idempotency
-- [auth.md](auth.md) — where `error.Auth` comes from
+- [transactions.md](transactions.md) - atomic batches and idempotency
+- [auth.md](auth.md) - where `error.Auth` comes from

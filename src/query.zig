@@ -1,4 +1,4 @@
-//! mongreldb.query — fluent query builder.
+//! mongreldb.query - fluent query builder.
 //!
 //! `QueryBuilder` pushes selection conditions down to the engine's native
 //! indexes rather than pulling rows client-side. Chain conditions, projection,

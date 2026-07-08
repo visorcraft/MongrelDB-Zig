@@ -1,7 +1,7 @@
 //! mongreldb is the pure-Zig HTTP client for [MongrelDB].
 //!
 //! It talks to a running mongreldb-server daemon's JSON API over the standard
-//! library `std.http.Client` — no external dependencies. The surface mirrors
+//! library `std.http.Client` - no external dependencies. The surface mirrors
 //! the MongrelDB PHP and Go clients: typed CRUD, a fluent query builder that
 //! pushes conditions down to the engine's native indexes, idempotent batch
 //! transactions, full SQL access, and schema introspection.
@@ -43,7 +43,7 @@ pub const Array = json.Array;
 
 /// `Cell` pairs a column id with its value. The client flattens a slice of
 /// cells to the server's on-wire `[col_id, value, col_id, value, ...]` array
-/// before sending. Pair order is irrelevant — each value is preceded by its
+/// before sending. Pair order is irrelevant - each value is preceded by its
 /// own column id.
 pub const Cell = struct {
     id: i64,
@@ -92,7 +92,7 @@ pub const Options = struct {
 ///
 /// All methods take an `allocator` used for the request body, the parsed
 /// response, and any returned data. The returned data is owned by that
-/// allocator and is valid until the allocator frees it — pass an
+/// allocator and is valid until the allocator frees it - pass an
 /// `std.heap.ArenaAllocator` and reset it when you are done with the results.
 pub const Client = struct {
     allocator: Allocator,
@@ -209,7 +209,7 @@ pub const Client = struct {
     // ── CRUD (via the Kit typed transaction endpoint) ─────────────────────
 
     /// `put` inserts a row. `idempotency_key`, if non-empty, makes the commit
-    /// safe to retry — the daemon returns the original result on duplicate
+    /// safe to retry - the daemon returns the original result on duplicate
     /// commits. Returns the per-operation result object (the first element of
     /// the server's results array).
     pub fn put(self: *Client, allocator: Allocator, table: []const u8, cells: []const Cell, idempotency_key: []const u8) Error!Value {
@@ -422,7 +422,7 @@ pub const Client = struct {
 ///
 /// Every status code is handled explicitly by category so the client never
 /// trips an unreachable/panic on a code the daemon might return (e.g. a 400
-/// validation error, a 500 engine error, or a redirect) — the `else` arms map
+/// validation error, a 500 engine error, or a redirect) - the `else` arms map
 /// any unmapped code to a sensible category instead of `@panic`-ing.
 fn mapStatus(code: u16) Error {
     return switch (code) {

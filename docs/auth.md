@@ -2,10 +2,10 @@
 
 A `mongreldb-server` daemon runs in one of three modes:
 
-1. **Open** (default) — no auth required.
-2. **Bearer token** (`--auth-token <TOKEN>`) — every request must carry an
+1. **Open** (default) - no auth required.
+2. **Bearer token** (`--auth-token <TOKEN>`) - every request must carry an
    `Authorization: Bearer <TOKEN>` header.
-3. **HTTP Basic** (`--auth-users`) — every request must carry an
+3. **HTTP Basic** (`--auth-users`) - every request must carry an
    `Authorization: Basic <base64(user:pass)>` header.
 
 The Zig client supports all three through the `Options` struct passed to
@@ -147,5 +147,5 @@ manager, or a file outside the repo. Never commit a real token.
 
 ## Next steps
 
-- [errors.md](errors.md) — `error.Auth` and the rest of the typed error set
-- [quickstart.md](quickstart.md) — the full end-to-end walkthrough
+- [errors.md](errors.md) - `error.Auth` and the rest of the typed error set
+- [quickstart.md](quickstart.md) - the full end-to-end walkthrough

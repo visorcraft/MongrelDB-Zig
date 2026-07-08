@@ -1,4 +1,4 @@
-//! mongreldb.transaction — batched, atomic transactions.
+//! mongreldb.transaction - batched, atomic transactions.
 //!
 //! A `Transaction` buffers a sequence of put and delete operations and flushes
 //! them atomically in a single `/kit/txn` request. The builder methods return
