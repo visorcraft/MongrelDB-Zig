@@ -412,11 +412,24 @@ pub const Client = struct {
 };
 
 /// `mapStatus` maps an HTTP status code to a typed `Error`.
+///
+/// Every status code is handled explicitly by category so the client never
+/// trips an unreachable/panic on a code the daemon might return (e.g. a 400
+/// validation error, a 500 engine error, or a redirect) — the `else` arms map
+/// any unmapped code to a sensible category instead of `@panic`-ing.
 fn mapStatus(code: u10) Error {
     return switch (code) {
+        // 3xx redirections: the client does not follow them for these JSON
+        // endpoints, so treat as a transport-level failure.
+        300, 301, 302, 303, 304, 307, 308 => error.Http,
+        // 4xx client errors.
+        400, 405...408, 410...428, 431, 451 => error.Query,
         401, 403 => error.Auth,
+        402, 409 => error.Conflict,
         404 => error.NotFound,
-        409 => error.Conflict,
+        // 5xx server errors.
+        500...599 => error.Http,
+        // Any other code (1xx informational, unmapped 4xx, etc.).
         else => error.Query,
     };
 }
