@@ -31,6 +31,10 @@ pub const Transaction = transaction_mod.Transaction;
 /// `default_base_url` is the daemon address used when none is supplied.
 pub const default_base_url = "http://127.0.0.1:8453";
 
+/// `max_response_bytes` caps the size of a response body read from the daemon
+/// (256 MB). Bodies larger than this are aborted as a `Query` error.
+pub const max_response_bytes: usize = 268435456;
+
 /// `Value` is a dynamic JSON value, used for cells, query parameters, and the
 /// untyped payloads returned by the daemon (row data, schema descriptors, etc.).
 pub const Value = json.Value;
@@ -306,22 +310,25 @@ pub const Client = struct {
 
     // ── SQL ───────────────────────────────────────────────────────────────
 
-    /// `sql` executes a SQL statement via the `/sql` endpoint. When the daemon
-    /// returns a JSON result set, the rows are decoded and returned; for
-    /// statements that yield no rows (DDL/DML) or a non-JSON (Arrow IPC) body,
-    /// it returns an empty slice and no error.
+    /// `sql` executes a SQL statement via the `/sql` endpoint, requesting JSON
+    /// output. The server returns a JSON array of row objects keyed by column
+    /// name, e.g. `[{"id": 1, "name": "Alice", "score": 95.5}]`. For statements
+    /// that yield no rows (DDL/DML), the body is empty and an empty slice is
+    /// returned.
     pub fn sql(self: *Client, allocator: Allocator, sql_text: []const u8) Error![]Value {
         var root = ObjectMap.init(allocator);
         root.put("sql", .{ .string = sql_text }) catch return error.OutOfMemory;
+        root.put("format", .{ .string = "json" }) catch return error.OutOfMemory;
 
         const body = try self.postRaw(allocator, "/sql", .{ .object = root });
         defer allocator.free(body);
 
         const trimmed = mem.trim(u8, body, " \t\r\n");
         if (trimmed.len == 0) return &[_]Value{};
-        // The /sql endpoint generally streams Arrow IPC bytes for SELECTs; only
-        // decode when the body is actually JSON to avoid noise.
-        if (trimmed[0] != '{' and trimmed[0] != '[') return &[_]Value{};
+        // JSON format requested; a leading '{' is a single object (e.g. an error
+        // envelope), not a row set, so return an empty slice. A '[' begins the
+        // row array to decode.
+        if (trimmed[0] != '[') return &[_]Value{};
 
         const parsed = json.parseFromSliceLeaky(Value, allocator, body, .{}) catch return error.Json;
         switch (parsed) {
@@ -433,6 +440,12 @@ pub const Client = struct {
             .response_storage = .{ .dynamic = &response_body },
             .max_append_size = 64 * 1024 * 1024,
         }) catch return error.Http;
+
+        // Cap the response: a body larger than max_response_bytes is aborted as
+        // a Query error rather than buffering unbounded data.
+        if (response_body.items.len > max_response_bytes) {
+            return error.Query;
+        }
 
         const code: u16 = @intFromEnum(result.status);
         if (code < 200 or code >= 300) {

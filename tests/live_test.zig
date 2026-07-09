@@ -215,6 +215,48 @@ fn mustPut(a: Allocator, table: []const u8, cells: []const Cell) !void {
     _ = try harness_client.?.put(a, table, cells, "");
 }
 
+// cellValue extracts the value for colID from a Kit row's flat `cells` array
+// (shape: [col_id, value, ...]), or null if absent.
+fn cellValue(row: Value, col_id: i64) ?Value {
+    const obj = switch (row) {
+        .object => |o| o,
+        else => return null,
+    };
+    const cells_val = obj.get("cells") orelse return null;
+    const cells = switch (cells_val) {
+        .array => |arr| arr.items,
+        else => return null,
+    };
+    var i: usize = 0;
+    while (i + 1 < cells.len) : (i += 2) {
+        const id = switch (cells[i]) {
+            .integer => |n| n,
+            else => continue,
+        };
+        if (id == col_id) return cells[i + 1];
+    }
+    return null;
+}
+
+// cellInt64 extracts an i64 cell value, failing the test if absent/non-int.
+fn cellInt64(row: Value, col_id: i64) !i64 {
+    const v = cellValue(row, col_id) orelse return error.MissingCell;
+    return switch (v) {
+        .integer => |n| n,
+        else => error.NotInteger,
+    };
+}
+
+// cellFloat64 extracts an f64 cell value, failing the test if absent/non-float.
+fn cellFloat64(row: Value, col_id: i64) !f64 {
+    const v = cellValue(row, col_id) orelse return error.MissingCell;
+    return switch (v) {
+        .float => |n| n,
+        .integer => |n| @floatFromInt(n),
+        else => error.NotFloat,
+    };
+}
+
 // ── Tests ────────────────────────────────────────────────────────────────
 
 test "health" {
@@ -290,6 +332,9 @@ test "upsertInsertsThenUpdates" {
     const rows = try q.execute();
 
     try testing.expectEqual(@as(usize, 1), rows.items.len);
+    // The updated amount value is visible on the returned row.
+    try testing.expectEqual(@as(i64, 1), try cellInt64(rows.items[0], 1));
+    try testing.expectEqual(@as(f64, 120.0), try cellFloat64(rows.items[0], 2));
 }
 
 test "queryByPK" {
@@ -311,6 +356,8 @@ test "queryByPK" {
     const rows = try q.execute();
 
     try testing.expectEqual(@as(usize, 1), rows.items.len);
+    // The returned row must carry the queried PK value.
+    try testing.expectEqual(@as(i64, 42), try cellInt64(rows.items[0], 1));
 }
 
 test "queryRange" {
@@ -334,8 +381,13 @@ test "queryRange" {
     _ = try q.where("range", range_params);
     const rows = try q.execute();
 
-    try testing.expect(rows.items.len >= 1);
+    // Only the row with amount=120 (pk=2) falls in [100, 150].
+    try testing.expectEqual(@as(usize, 1), rows.items.len);
     try testing.expect(!q.truncatedResult());
+    // Verify the PK and amount values of returned rows match the filter range.
+    try testing.expectEqual(@as(i64, 2), try cellInt64(rows.items[0], 1));
+    const amt = try cellInt64(rows.items[0], 2);
+    try testing.expect(amt >= 100 and amt <= 150);
 }
 
 test "transactionPutCommit" {
@@ -378,8 +430,20 @@ test "sql" {
     const a = harness_alloc;
     const c = harness_client.?;
 
-    // SELECT 1 streams Arrow IPC rather than JSON, so we only assert it runs.
-    _ = try c.sql(a, "SELECT 1");
+    const name = try uniqueTable(a, "zig_sql");
+    try freshTable(a, name, &.{ intCol(1, "id", true), intCol(2, "amount", false) });
+
+    try testing.expectEqual(@as(i64, 0), try c.count(a, name));
+
+    // INSERT via SQL must increase the row count.
+    const insert_stmt = std.fmt.allocPrint(a, "INSERT INTO {s} (id, amount) VALUES (10, 42)", .{name}) catch return error.OutOfMemory;
+    _ = try c.sql(a, insert_stmt);
+    try testing.expectEqual(@as(i64, 1), try c.count(a, name));
+
+    // JSON SQL mode must return the inserted row.
+    const select_stmt = std.fmt.allocPrint(a, "SELECT id, amount FROM {s}", .{name}) catch return error.OutOfMemory;
+    const rows = try c.sql(a, select_stmt);
+    try testing.expectEqual(@as(usize, 1), rows.len);
 }
 
 test "schema" {
