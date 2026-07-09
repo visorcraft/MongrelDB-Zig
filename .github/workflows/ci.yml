@@ -62,7 +62,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: bin/mongreldb-server
-          key: mongreldb-server-linux-x64-${{ env.SERVER_VERSION }}
+          key: mongreldb-server-linux-x64-${{ env.SERVER_VERSION }}-json
 
       - name: Download mongreldb-server
         if: steps.server-cache.outputs.cache-hit != 'true'
