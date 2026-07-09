@@ -255,6 +255,43 @@ test "putAndCountRoundTrip" {
     try testing.expectEqual(@as(i64, 2), try c.count(a, name));
 }
 
+test "upsertInsertsThenUpdates" {
+    try skipIfNoClient();
+    const a = harness_alloc;
+    const c = harness_client.?;
+
+    const name = try uniqueTable(a, "zig_upsert");
+    try freshTable(a, name, &.{ intCol(1, "id", true), floatCol(2, "amount") });
+
+    // First upsert inserts.
+    _ = try c.upsert(a, name, &.{
+        .{ .id = 1, .value = mongreldb.intValue(1) },
+        .{ .id = 2, .value = mongreldb.floatValue(99.5) },
+    }, &.{
+        .{ .id = 2, .value = mongreldb.floatValue(99.5) },
+    }, "");
+    try testing.expectEqual(@as(i64, 1), try c.count(a, name));
+
+    // Second upsert on the same PK updates (still one row).
+    _ = try c.upsert(a, name, &.{
+        .{ .id = 1, .value = mongreldb.intValue(1) },
+        .{ .id = 2, .value = mongreldb.floatValue(120.0) },
+    }, &.{
+        .{ .id = 2, .value = mongreldb.floatValue(120.0) },
+    }, "");
+    try testing.expectEqual(@as(i64, 1), try c.count(a, name));
+
+    // The updated value is returned by a query.
+    var pk_params = ObjectMap.init(a);
+    try pk_params.put("value", mongreldb.intValue(1));
+
+    var q = c.query(a, name);
+    _ = try q.where("pk", pk_params);
+    const rows = try q.execute();
+
+    try testing.expectEqual(@as(usize, 1), rows.items.len);
+}
+
 test "queryByPK" {
     try skipIfNoClient();
     const a = harness_alloc;

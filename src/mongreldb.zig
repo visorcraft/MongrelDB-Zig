@@ -229,6 +229,30 @@ pub const Client = struct {
         return results.items[0];
     }
 
+    /// `upsert` inserts a row, or updates it on a primary-key conflict.
+    /// `cells` are the insert values; `update_cells`, when non-empty, are the
+    /// values to apply on a conflict (an empty slice means DO NOTHING).
+    /// `idempotency_key`, if non-empty, makes the commit safe to retry.
+    pub fn upsert(self: *Client, allocator: Allocator, table: []const u8, cells: []const Cell, update_cells: []const Cell, idempotency_key: []const u8) Error!Value {
+        var inner = ObjectMap.init(allocator);
+        inner.put("table", .{ .string = table }) catch return error.OutOfMemory;
+        inner.put("cells", .{ .array = try flattenCells(allocator, cells) }) catch return error.OutOfMemory;
+        inner.put("returning", .{ .bool = false }) catch return error.OutOfMemory;
+        if (update_cells.len > 0) {
+            inner.put("update_cells", .{ .array = try flattenCells(allocator, update_cells) }) catch return error.OutOfMemory;
+        }
+
+        var op = ObjectMap.init(allocator);
+        op.put("upsert", .{ .object = inner }) catch return error.OutOfMemory;
+
+        var ops = Array.init(allocator);
+        ops.append(.{ .object = op }) catch return error.OutOfMemory;
+
+        const results = try self.commitTxn(allocator, ops, idempotency_key);
+        if (results.items.len == 0) return Value{ .null = {} };
+        return results.items[0];
+    }
+
     /// `deleteByPk` removes a row by its primary-key value.
     pub fn deleteByPk(self: *Client, allocator: Allocator, table: []const u8, pk: Value) Error!void {
         var inner = ObjectMap.init(allocator);
