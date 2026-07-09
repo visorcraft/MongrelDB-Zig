@@ -16,7 +16,6 @@ const std = @import("std");
 const mongreldb = @import("mongreldb");
 
 const url = "http://127.0.0.1:8453";
-const table = "example_txn";
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -32,6 +31,18 @@ pub fn main() !void {
         std.process.exit(1);
     }
     std.debug.print("Connected to MongrelDB\n", .{});
+
+    // Unique table name + idempotency key per run so concurrent/repeated runs
+    // never collide and retry logic isn't confused with a prior run's batch.
+    const ts = std.time.timestamp();
+    const table = try std.fmt.allocPrint(allocator, "example_txn_{d}", .{ts});
+    const idempotency_key = try std.fmt.allocPrint(allocator, "example-txn-{d}", .{ts});
+
+    // Always drop the table on exit, even if an earlier step errored.
+    defer {
+        db.dropTable(allocator, table) catch {};
+        std.debug.print("Dropped table {s}\n", .{table});
+    }
 
     _ = try db.createTable(allocator, table, &.{
         .{ .id = 1, .name = "id", .ty = "int64", .primary_key = true },
@@ -75,7 +86,7 @@ pub fn main() !void {
         .{ .id = 2, .value = mongreldb.stringValue("Dave") },
         .{ .id = 3, .value = mongreldb.floatValue(60.0) },
     }, false);
-    _ = try retry.commit("example-txn-key");
+    _ = try retry.commit(idempotency_key);
     const after_first = try db.count(allocator, table);
     std.debug.print("After first idempotent commit: {d} rows\n", .{after_first});
 
@@ -85,10 +96,7 @@ pub fn main() !void {
         .{ .id = 2, .value = mongreldb.stringValue("Dave") },
         .{ .id = 3, .value = mongreldb.floatValue(60.0) },
     }, false);
-    _ = try retry2.commit("example-txn-key");
+    _ = try retry2.commit(idempotency_key);
     const after_dup = try db.count(allocator, table);
     std.debug.print("After duplicate idempotent commit (same key): {d} rows (no double-apply)\n", .{after_dup});
-
-    db.dropTable(allocator, table) catch {};
-    std.debug.print("Dropped table {s}\n", .{table});
 }

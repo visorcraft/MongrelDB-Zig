@@ -15,7 +15,6 @@ const std = @import("std");
 const mongreldb = @import("mongreldb");
 
 const url = "http://127.0.0.1:8453";
-const table = "example_crud";
 
 pub fn main() !void {
     // An arena allocator frees every client allocation in one go at the end.
@@ -33,6 +32,15 @@ pub fn main() !void {
         std.process.exit(1);
     }
     std.debug.print("Connected to MongrelDB\n", .{});
+
+    // Unique table name per run so concurrent/repeated runs never collide.
+    const table = try std.fmt.allocPrint(allocator, "example_crud_{d}", .{std.time.timestamp()});
+
+    // Always drop the table on exit, even if an earlier step errored.
+    defer {
+        db.dropTable(allocator, table) catch {};
+        std.debug.print("Dropped table {s}\n", .{table});
+    }
 
     // Create the table. Schema: id (int64 PK), name (varchar), score (float64).
     const tid = try db.createTable(allocator, table, &.{
@@ -85,10 +93,6 @@ pub fn main() !void {
     try db.deleteByPk(allocator, table, mongreldb.intValue(3));
     const after_delete = try db.count(allocator, table);
     std.debug.print("Deleted Carol; remaining rows: {d}\n", .{after_delete});
-
-    // Cleanup.
-    db.dropTable(allocator, table) catch {};
-    std.debug.print("Dropped table {s}\n", .{table});
 }
 
 // Print each row object from a query result array. Rows are JSON objects keyed

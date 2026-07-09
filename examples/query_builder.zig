@@ -15,7 +15,6 @@ const std = @import("std");
 const mongreldb = @import("mongreldb");
 
 const url = "http://127.0.0.1:8453";
-const table = "example_query";
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -31,6 +30,15 @@ pub fn main() !void {
         std.process.exit(1);
     }
     std.debug.print("Connected to MongrelDB\n", .{});
+
+    // Unique table name per run so concurrent/repeated runs never collide.
+    const table = try std.fmt.allocPrint(allocator, "example_query_{d}", .{std.time.timestamp()});
+
+    // Always drop the table on exit, even if an earlier step errored.
+    defer {
+        db.dropTable(allocator, table) catch {};
+        std.debug.print("Dropped table {s}\n", .{table});
+    }
 
     _ = try db.createTable(allocator, table, &.{
         .{ .id = 1, .name = "id", .ty = "int64", .primary_key = true },
@@ -89,9 +97,6 @@ pub fn main() !void {
     const pk_rows = try pk_q.execute();
     std.debug.print("PK query (id == 4) returned {d} rows:\n", .{pk_rows.items.len});
     printRows(pk_rows);
-
-    db.dropTable(allocator, table) catch {};
-    std.debug.print("Dropped table {s}\n", .{table});
 }
 
 fn printRows(rows: mongreldb.Array) void {
