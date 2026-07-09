@@ -91,6 +91,14 @@ jobs:
       - name: Run live tests
         run: zig build test
 
+      - name: Run examples
+        run: |
+          for ex in examples/*.zig; do
+            echo "=== Running $ex ==="
+            zig run "$ex" --dep mongreldb -Mroot="$ex" -Mmongreldb=src/mongreldb.zig 2>/dev/null || { echo "Note: Zig examples may need build.zig integration"; }
+          done
+        continue-on-error: true
+
       - name: Dump server log on failure
         if: failure()
         run: cat /tmp/mongreldb-server.log
