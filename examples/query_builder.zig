@@ -77,13 +77,16 @@ pub fn main() !void {
 
     // Range condition: scores in [60.0, 90.0]. The "column" alias maps to the
     // server's column_id; pass the numeric column id (3), not the name.
+    // Use range_f64 because the score column is float64 (plain range expects i64).
     var range_params = mongreldb.ObjectMap.init(allocator);
     try range_params.put("column", mongreldb.intValue(3));
     try range_params.put("min", mongreldb.floatValue(60.0));
     try range_params.put("max", mongreldb.floatValue(90.0));
+    try range_params.put("min_inclusive", mongreldb.boolValue(true));
+    try range_params.put("max_inclusive", mongreldb.boolValue(true));
 
     var range_q = db.query(allocator, table);
-    _ = try range_q.where("range", range_params);
+    _ = try range_q.where("range_f64", range_params);
     const range_rows = try range_q.execute();
     std.debug.print("Range query (score in [60,90]) returned {d} rows:\n", .{range_rows.items.len});
     printRows(range_rows);
