@@ -459,15 +459,16 @@ pub fn flattenCells(allocator: Allocator, cells: []const Cell) Error!Array {
     return flat;
 }
 
-/// `urlPathEscape` percent-escapes a path segment (used for table names that
-/// may contain characters unsafe in a URL). It does not escape the forward
-/// slash.
+/// `urlPathEscape` percent-escapes a path segment so table names containing
+/// '/', '?', '#', or spaces cannot inject extra segments or break routing.
+/// Only RFC 3986 unreserved characters pass through unescaped. The forward
+/// slash is encoded.
 pub fn urlPathEscape(seg: []const u8) []const u8 {
     // Fast path: nothing to escape.
     var need_escape = false;
     for (seg) |b| {
         switch (b) {
-            'A'...'Z', 'a'...'z', '0'...'9', '-', '_', '.', '~', '/' => {},
+            'A'...'Z', 'a'...'z', '0'...'9', '-', '_', '.', '~' => {},
             else => {
                 need_escape = true;
                 break;
@@ -481,7 +482,7 @@ pub fn urlPathEscape(seg: []const u8) []const u8 {
     const hex = "0123456789ABCDEF";
     for (seg) |b| {
         switch (b) {
-            'A'...'Z', 'a'...'z', '0'...'9', '-', '_', '.', '~', '/' => out.append(std.heap.page_allocator, b) catch return seg,
+            'A'...'Z', 'a'...'z', '0'...'9', '-', '_', '.', '~' => out.append(std.heap.page_allocator, b) catch return seg,
             else => {
                 out.append(std.heap.page_allocator, '%') catch return seg;
                 out.append(std.heap.page_allocator, hex[b >> 4]) catch return seg;

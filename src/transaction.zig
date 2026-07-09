@@ -79,9 +79,16 @@ pub const Transaction = struct {
 
     pub fn commit(self: *Transaction, idempotency_key: []const u8) Error!Array {
         if (self.committed) return error.AlreadyCommitted;
+        if (self.ops.items.len == 0) {
+            self.committed = true;
+            return Array.init(self.allocator);
+        }
+        // Send first, mark committed only after the server confirms. This
+        // keeps the transaction retryable (with an idempotency key) if the
+        // network call fails or times out.
+        const result = try self.client.commitTxn(self.allocator, self.ops, idempotency_key);
         self.committed = true;
-        if (self.ops.items.len == 0) return Array.init(self.allocator);
-        return self.client.commitTxn(self.allocator, self.ops, idempotency_key);
+        return result;
     }
 
     pub fn rollback(self: *Transaction) Error!void {
