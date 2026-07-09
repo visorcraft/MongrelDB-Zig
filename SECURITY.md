@@ -23,9 +23,12 @@ no data at rest; it is a thin request/response layer over the daemon.
   (column IDs, typed values) — no string interpolation, no SQL injection
   surface. User-supplied values are serialized as typed JSON, not
   concatenated into queries.
-- SQL is sent to the daemon's DataFusion-backed `/sql` endpoint, which
-  parses and parameterizes it server-side. The client never interprets SQL
-  locally.
+- **WARNING — raw SQL:** The `sql()` method sends a raw SQL string to the
+  server. It does NOT parameterize or sanitize input, and the client never
+  interprets SQL locally. Never interpolate untrusted user input into SQL
+  statements — use parameterized queries where the server supports them, or
+  validate/escape input yourself. (The native condition API and query
+  builder remain type-safe and are not affected.)
 - Idempotency keys are caller-supplied opaque strings; the client does not
   derive or store them.
 
