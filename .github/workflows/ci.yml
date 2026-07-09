@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
@@ -44,7 +44,7 @@ jobs:
       MONGRELDB_URL: http://127.0.0.1:8453
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install Zig
         uses: goto-bus-stop/setup-zig@v2
@@ -59,7 +59,7 @@ jobs:
 
       - name: Cache mongreldb-server binary
         id: server-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: bin/mongreldb-server
           key: mongreldb-server-linux-x64-${{ env.SERVER_VERSION }}
