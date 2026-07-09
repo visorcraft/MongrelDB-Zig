@@ -93,11 +93,11 @@ jobs:
 
       - name: Run examples
         run: |
-          # Examples import the mongreldb module from src/. We add src/ to the
-          # path and run each example individually.
+          # Each example uses @import("mongreldb"). We map that module name
+          # to the library root via -Mmongreldb and pass the example as root.
           for ex in examples/*.zig; do
             echo "=== Running $ex ==="
-            zig run "$ex" -I src || { echo "FAILED: $ex"; exit 1; }
+            zig run "$ex" --dep mongreldb -Mmongreldb=src/mongreldb.zig || { echo "FAILED: $ex"; exit 1; }
           done
 
       - name: Dump server log on failure
