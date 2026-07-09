@@ -93,11 +93,11 @@ jobs:
 
       - name: Run examples
         run: |
-          # Each example uses @import("mongreldb"). We map that module name
-          # to the library root via -Mmongreldb and pass the example as root.
+          # Each example uses @import("mongreldb"). In Zig 0.13 you must use
+          # -Mroot for the entry point and -Mmongreldb for the dependency.
           for ex in examples/*.zig; do
             echo "=== Running $ex ==="
-            zig run "$ex" --dep mongreldb -Mmongreldb=src/mongreldb.zig || { echo "FAILED: $ex"; exit 1; }
+            zig run --dep mongreldb -Mroot="$ex" -Mmongreldb=src/mongreldb.zig || { echo "FAILED: $ex"; exit 1; }
           done
 
       - name: Dump server log on failure
