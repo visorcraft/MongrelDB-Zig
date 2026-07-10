@@ -108,24 +108,37 @@ pub fn main() !void {
     if (!ok) return error.DaemonUnreachable;
 
     // 3. Create a table. Each column has a stable numeric id, a name, a type,
-    //    and flags. The primary_key column is the row identity.
+    //    and optional constraint-style fields (`enum_variants`, `default_value`).
+    //    The primary_key column is the row identity.
     const tid = try db.createTable(allocator, "orders", &.{
         .{ .id = 1, .name = "id", .ty = "int64", .primary_key = true },
         .{ .id = 2, .name = "customer", .ty = "varchar" },
         .{ .id = 3, .name = "amount", .ty = "float64" },
+        // Enum column: only the four listed values are accepted.
+        .{ .id = 4, .name = "status", .ty = "varchar",
+           .enum_variants = &.{ "pending", "shipped", "delivered", "cancelled" } },
+        // Enum column with a default applied when the cell is omitted.
+        .{ .id = 5, .name = "currency", .ty = "varchar",
+           .enum_variants = &.{ "USD", "EUR", "GBP" },
+           .default_value = "USD" },
     });
     std.debug.print("created table id: {d}\n", .{tid});
 
-    // 4. Insert rows. Cells pair column id -> value.
+    // 4. Insert rows. Cells pair column id -> value. The `status` cell is
+    //    required because it has no default; `currency` is supplied here but
+    //    can be omitted on subsequent inserts and the engine will fill it in.
     _ = try db.put(allocator, "orders", &.{
         .{ .id = 1, .value = mongreldb.intValue(1) },
         .{ .id = 2, .value = mongreldb.stringValue("Alice") },
         .{ .id = 3, .value = mongreldb.floatValue(99.5) },
+        .{ .id = 4, .value = mongreldb.stringValue("pending") },
+        .{ .id = 5, .value = mongreldb.stringValue("USD") },
     }, "");
     _ = try db.put(allocator, "orders", &.{
         .{ .id = 1, .value = mongreldb.intValue(2) },
         .{ .id = 2, .value = mongreldb.stringValue("Bob") },
         .{ .id = 3, .value = mongreldb.floatValue(150.0) },
+        .{ .id = 4, .value = mongreldb.stringValue("shipped") },
     }, "");
 
     // 5. Query with a native index condition. The range index serves this in
@@ -167,7 +180,7 @@ total rows: 2
 |------|--------------|
 | `mongreldb.Client.init(allocator, url, .{})` | Builds an HTTP client targeting one daemon. Backed by the std HTTP client. |
 | `db.health(allocator)` | GET `/health`; returns `true` when the daemon answers. |
-| `db.createTable(allocator, name, columns)` | POST `/kit/create_table`. Column `id`s are the on-wire identifiers; use them everywhere else. |
+| `db.createTable(allocator, name, columns)` | POST `/kit/create_table`. Column `id`s are the on-wire identifiers; use them everywhere else. `Column.enum_variants` and `Column.default_value` are optional and emitted only when set. |
 | `db.put(allocator, table, cells, key)` | Single-op transaction: POST `/kit/txn` with one `put` op. `cells` is flattened to `[col_id, val, ...]`. |
 | `db.query(allocator, table).where(...)` | Builds a `/kit/query` body. `where` pushes a condition down to a native index. |
 | `.projection(&.{1, 2})` | Server returns only those column ids, saving bandwidth. |
@@ -175,7 +188,39 @@ total rows: 2
 | `q.execute()` | Sends the query and decodes the `rows` array. |
 | `db.count(allocator, table)` | GET `/tables/{name}/count`. |
 
-## 6. Common pitfalls
+## 6. Constrained columns
+
+`Column` accepts two optional constraint-style fields that are forwarded to the
+daemon verbatim. They are omitted from the JSON body when null, so existing
+schemas that don't set them produce an identical payload.
+
+| Field | Type | Effect |
+|-------|------|--------|
+| `enum_variants` | `?[]const []const u8` | Restrict the column to one of the listed string values. The engine rejects writes outside the set with `error.Conflict`. |
+| `default_value` | `?[]const u8` | Default value applied when the cell is omitted on a `put`. Sent as a raw string and coerced server-side per the column's `ty`. |
+
+Both fields compose. A column can be a plain string, an enum-only string, a
+string with a default, or an enum with a default:
+
+```zig
+// Plain string - no constraints, no extra keys on the wire.
+.{ .id = 2, .name = "customer", .ty = "varchar" },
+
+// Enum only - writes outside the set are rejected at commit time.
+.{ .id = 4, .name = "status", .ty = "varchar",
+   .enum_variants = &.{ "pending", "shipped", "delivered", "cancelled" } },
+
+// Enum with a default - the engine fills in "USD" when the cell is omitted.
+.{ .id = 5, .name = "currency", .ty = "varchar",
+   .enum_variants = &.{ "USD", "EUR", "GBP" },
+   .default_value = "USD" },
+```
+
+An empty `enum_variants` slice is also omitted, so `null` and `&[_][]const u8{}`
+produce identical wire shapes. See `examples/constrained_columns.zig` for a
+runnable walkthrough that exercises both fields end-to-end.
+
+## 7. Common pitfalls
 
 **Using the column name instead of the column id.** Every on-wire API uses the
 numeric `id` from `createTable`, never the `name`. The query builder's `column`

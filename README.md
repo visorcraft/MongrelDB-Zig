@@ -69,6 +69,13 @@ pub fn main() !void {
         .{ .id = 1, .name = "id", .ty = "int64", .primary_key = true },
         .{ .id = 2, .name = "customer", .ty = "varchar" },
         .{ .id = 3, .name = "amount", .ty = "float64" },
+        // Enum column: only the four listed values are accepted.
+        .{ .id = 4, .name = "status", .ty = "varchar",
+           .enum_variants = &.{ "pending", "shipped", "delivered", "cancelled" } },
+        // Enum column with a default applied when the cell is omitted.
+        .{ .id = 5, .name = "currency", .ty = "varchar",
+           .enum_variants = &.{ "USD", "EUR", "GBP" },
+           .default_value = "USD" },
     });
 
     // Insert rows (cells pair column id -> value).
@@ -76,6 +83,8 @@ pub fn main() !void {
         .{ .id = 1, .value = mongreldb.intValue(1) },
         .{ .id = 2, .value = mongreldb.stringValue("Alice") },
         .{ .id = 3, .value = mongreldb.floatValue(99.50) },
+        .{ .id = 4, .value = mongreldb.stringValue("pending") },
+        .{ .id = 5, .value = mongreldb.stringValue("USD") },
     }, "");
 
     // Query with a native index condition (learned-range index).
@@ -194,6 +203,29 @@ _ = try db.sql(allocator,
 The `/sql` endpoint streams Arrow IPC for SELECTs. `sql` therefore returns
 decoded rows only when the body is JSON; for IPC-streaming or non-row
 statements it returns an empty slice and no error.
+
+## Constrained columns
+
+`Column` carries two optional constraint-style fields that are emitted on the
+wire only when set, so existing call sites that omit them keep producing an
+identical payload.
+
+```zig
+// Enum: only the listed values are accepted. The engine rejects writes
+// outside the set with a 409 Conflict at commit time.
+.{ .id = 4, .name = "status", .ty = "varchar",
+   .enum_variants = &.{ "pending", "shipped", "delivered", "cancelled" } },
+
+// Default: supplied as a raw string, coerced server-side per the column's
+// `ty`. Omit the cell on a `put` and the engine fills it in.
+.{ .id = 5, .name = "currency", .ty = "varchar",
+   .enum_variants = &.{ "USD", "EUR", "GBP" },
+   .default_value = "USD" },
+```
+
+Both fields are `null` by default. An empty `enum_variants` slice is also
+omitted, so a column with no constraint is byte-identical to a pre-T5.1
+schema. See `examples/constrained_columns.zig` for a runnable walkthrough.
 
 ## User & role management
 
