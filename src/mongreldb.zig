@@ -55,14 +55,25 @@ pub const Cell = struct {
 };
 
 /// `Column` describes one column in a CREATE TABLE request. It is serialized
-/// verbatim; the recognized keys are `id`, `name`, `ty`, `primary_key`, and
-/// `nullable`, matching the daemon's table-create extractor.
+/// verbatim; the recognized keys are `id`, `name`, `ty`, `primary_key`,
+/// `nullable`, `enum_variants`, and `default_value`, matching the daemon's
+/// table-create extractor. `enum_variants` and `default_value` are optional
+/// and only emitted when set, so existing call sites that omit them keep
+/// producing identical wire shapes.
 pub const Column = struct {
     id: i64,
     name: []const u8,
     ty: []const u8,
     primary_key: bool = false,
     nullable: bool = false,
+    /// Optional list of allowed enum variants for an enum-typed column. Null
+    /// (the default) means the column is not an enum. When supplied, the JSON
+    /// body includes `"enum_variants": [...]` verbatim.
+    enum_variants: ?[]const []const u8 = null,
+    /// Optional default value as a raw string (the daemon coerces per the
+    /// column's `ty`). Null (the default) means no default. When supplied,
+    /// the JSON body includes `"default_value": "..."` verbatim.
+    default_value: ?[]const u8 = null,
 };
 
 /// `Error` is the typed error set returned by every client operation. HTTP
@@ -160,13 +171,8 @@ pub const Client = struct {
     pub fn createTable(self: *Client, allocator: Allocator, name: []const u8, columns: []const Column) Error!i64 {
         var col_arr = Array.initCapacity(allocator, columns.len) catch return error.OutOfMemory;
         for (columns) |c| {
-            var col = ObjectMap.init(allocator);
-            col.put("id", .{ .integer = c.id }) catch return error.OutOfMemory;
-            col.put("name", .{ .string = c.name }) catch return error.OutOfMemory;
-            col.put("ty", .{ .string = c.ty }) catch return error.OutOfMemory;
-            col.put("primary_key", .{ .bool = c.primary_key }) catch return error.OutOfMemory;
-            col.put("nullable", .{ .bool = c.nullable }) catch return error.OutOfMemory;
-            col_arr.append(.{ .object = col }) catch return error.OutOfMemory;
+            const col_obj = try columnToJson(allocator, c);
+            col_arr.append(col_obj) catch return error.OutOfMemory;
         }
         var root = ObjectMap.init(allocator);
         root.put("name", .{ .string = name }) catch return error.OutOfMemory;
@@ -494,6 +500,34 @@ pub fn flattenCells(allocator: Allocator, cells: []const Cell) Error!Array {
         flat.append(c.value) catch return error.OutOfMemory;
     }
     return flat;
+}
+
+/// `columnToJson` serializes a single `Column` into the JSON object the
+/// daemon's `/kit/create_table` extractor recognizes. Always emits `id`,
+/// `name`, `ty`, `primary_key`, and `nullable`. Adds `enum_variants` when
+/// the field is set and non-empty, and `default_value` when set. Exposed at
+/// module scope so wire-shape conformance tests can verify the produced
+/// body without a live daemon.
+pub fn columnToJson(allocator: Allocator, c: Column) Error!Value {
+    var col = ObjectMap.init(allocator);
+    col.put("id", .{ .integer = c.id }) catch return error.OutOfMemory;
+    col.put("name", .{ .string = c.name }) catch return error.OutOfMemory;
+    col.put("ty", .{ .string = c.ty }) catch return error.OutOfMemory;
+    col.put("primary_key", .{ .bool = c.primary_key }) catch return error.OutOfMemory;
+    col.put("nullable", .{ .bool = c.nullable }) catch return error.OutOfMemory;
+    if (c.enum_variants) |variants| {
+        if (variants.len > 0) {
+            var arr = Array.initCapacity(allocator, variants.len) catch return error.OutOfMemory;
+            for (variants) |v| {
+                arr.append(.{ .string = v }) catch return error.OutOfMemory;
+            }
+            col.put("enum_variants", .{ .array = arr }) catch return error.OutOfMemory;
+        }
+    }
+    if (c.default_value) |dv| {
+        col.put("default_value", .{ .string = dv }) catch return error.OutOfMemory;
+    }
+    return Value{ .object = col };
 }
 
 /// `urlPathEscape` percent-escapes a path segment so table names containing
