@@ -383,6 +383,10 @@ Contributions are welcome. Please:
 2. Add focused tests near your change - the suite must stay green.
 3. Keep the client dependency-free (standard library only).
 
+## History retention
+
+Use `historyRetention`, `setHistoryRetentionEpochs`, and the returned `earliest_retained_epoch` with MongrelDB 0.47.1+.
+
 ## License
 
 Dual-licensed under the **MIT License** or the **Apache License, Version 2.0**,

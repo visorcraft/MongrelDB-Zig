@@ -135,6 +135,20 @@ test "columnToJson emits boolean default scalar" {
     try testing.expect(std.mem.indexOf(u8, s, "\"default_value\":true") != null);
 }
 
+test "columnToJson emits integer and null default scalars" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const integer = try mongreldb.columnToJson(a, .{ .id = 5, .name = "retries", .ty = "int64", .default_scalar = .{ .integer = 3 } });
+    const null_value = try mongreldb.columnToJson(a, .{ .id = 6, .name = "optional", .ty = "varchar", .default_scalar = .null });
+    const integer_json = try stringifyValue(a, integer);
+    const null_json = try stringifyValue(a, null_value);
+    defer a.free(integer_json);
+    defer a.free(null_json);
+    try testing.expect(std.mem.indexOf(u8, integer_json, "\"default_value\":3") != null);
+    try testing.expect(std.mem.indexOf(u8, null_json, "\"default_value\":null") != null);
+}
+
 test "columnToJson emits dynamic default expression" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();

@@ -155,6 +155,33 @@ pub const Client = struct {
         return true;
     }
 
+    pub const HistoryRetention = struct {
+        history_retention_epochs: u64,
+        earliest_retained_epoch: u64,
+    };
+
+    pub fn historyRetention(self: *Client, allocator: Allocator) Error!HistoryRetention {
+        return self.historyRetentionRequest(allocator, .GET, null);
+    }
+
+    pub fn setHistoryRetentionEpochs(self: *Client, allocator: Allocator, epochs: u64) Error!HistoryRetention {
+        var payload = ObjectMap.init(allocator);
+        defer payload.deinit();
+        payload.put("history_retention_epochs", .{ .integer = @intCast(epochs) }) catch return error.OutOfMemory;
+        return self.historyRetentionRequest(allocator, .PUT, .{ .object = payload });
+    }
+
+    fn historyRetentionRequest(self: *Client, allocator: Allocator, method: std.http.Method, payload: ?Value) Error!HistoryRetention {
+        const body = try self.rawRequest(allocator, method, "/history/retention", payload);
+        defer allocator.free(body);
+        const parsed = parseBody(allocator, body) catch return error.Json;
+        if (parsed != .object) return error.Json;
+        const h = parsed.object.get("history_retention_epochs") orelse return error.Json;
+        const e = parsed.object.get("earliest_retained_epoch") orelse return error.Json;
+        if (h != .integer or e != .integer) return error.Json;
+        return .{ .history_retention_epochs = @intCast(h.integer), .earliest_retained_epoch = @intCast(e.integer) };
+    }
+
     /// `tableNames` lists all table names in the database. The endpoint
     /// returns a bare JSON array of strings.
     pub fn tableNames(self: *Client, allocator: Allocator) Error![][]const u8 {
