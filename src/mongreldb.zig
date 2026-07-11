@@ -497,6 +497,7 @@ pub const Client = struct {
 
         const code: u16 = @intFromEnum(result.status);
         if (code < 200 or code >= 300) {
+            if (std.mem.indexOf(u8, response_body.items, "not found:") != null) return error.NotFound;
             return mapStatus(@intCast(code));
         }
         return allocator.dupe(u8, response_body.items) catch error.OutOfMemory;
