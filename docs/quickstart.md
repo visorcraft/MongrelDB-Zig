@@ -197,7 +197,9 @@ schemas that don't set them produce an identical payload.
 | Field | Type | Effect |
 |-------|------|--------|
 | `enum_variants` | `?[]const []const u8` | Restrict the column to one of the listed string values. The engine rejects writes outside the set with `error.Conflict`. |
-| `default_value` | `?[]const u8` | Default value applied when the cell is omitted on a `put`. Sent as a raw string and coerced server-side per the column's `ty`. |
+| `default_value` | `?[]const u8` | String default applied when the cell is omitted on a `put`. |
+| `default_scalar` | `?std.json.Value` | Non-string JSON scalar default. Caller must supply the scalar type expected by the column. Sent as `default_value` and takes precedence over the string field. |
+| `default_expr` | `?[]const u8` | Dynamic `now` or `uuid`. Takes precedence over both static fields. |
 
 Both fields compose. A column can be a plain string, an enum-only string, a
 string with a default, or an enum with a default:

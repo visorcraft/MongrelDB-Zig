@@ -216,7 +216,8 @@ identical payload.
 .{ .id = 4, .name = "status", .ty = "enum",
    .enum_variants = &.{ "pending", "shipped", "delivered", "cancelled" } },
 
-// Default: supplied as a raw string, coerced server-side per the column's
+// String default. Use default_scalar for typed static values, or default_expr
+// for dynamic "now"/"uuid" values. Expression wins, then scalar, then string.
 // `ty`. Omit the cell on a `put` and the engine fills it in.
 .{ .id = 5, .name = "currency", .ty = "enum",
    .enum_variants = &.{ "USD", "EUR", "GBP" },

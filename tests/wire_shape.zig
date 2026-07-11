@@ -119,3 +119,36 @@ test "columnToJson omits empty enum_variants slice" {
     try testing.expect(std.mem.indexOf(u8, s, "enum_variants") == null);
     try testing.expect(std.mem.indexOf(u8, s, "\"default_value\":\"x\"") != null);
 }
+
+test "columnToJson emits boolean default scalar" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const value = try mongreldb.columnToJson(a, .{
+        .id = 4,
+        .name = "enabled",
+        .ty = "bool",
+        .default_scalar = .{ .bool = true },
+    });
+    const s = try stringifyValue(a, value);
+    defer a.free(s);
+    try testing.expect(std.mem.indexOf(u8, s, "\"default_value\":true") != null);
+}
+
+test "columnToJson emits dynamic default expression" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    const value = try mongreldb.columnToJson(a, .{
+        .id = 5,
+        .name = "created_at",
+        .ty = "timestamp",
+        .default_value = "legacy",
+        .default_scalar = .{ .bool = false },
+        .default_expr = "now",
+    });
+    const s = try stringifyValue(a, value);
+    defer a.free(s);
+    try testing.expect(std.mem.indexOf(u8, s, "\"default_expr\":\"now\"") != null);
+    try testing.expect(std.mem.indexOf(u8, s, "default_value") == null);
+}

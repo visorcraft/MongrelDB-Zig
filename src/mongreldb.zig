@@ -74,6 +74,12 @@ pub const Column = struct {
     /// column's `ty`). Null (the default) means no default. When supplied,
     /// the JSON body includes `"default_value": "..."` verbatim.
     default_value: ?[]const u8 = null,
+    /// Optional non-string JSON scalar, emitted as `default_value`. This takes
+    /// precedence over the legacy string field when both are supplied.
+    default_scalar: ?Value = null,
+    /// Dynamic default expression (`"now"` or `"uuid"`). Takes precedence
+    /// over both static default fields.
+    default_expr: ?[]const u8 = null,
 };
 
 /// `Error` is the typed error set returned by every client operation. HTTP
@@ -533,7 +539,11 @@ pub fn columnToJson(allocator: Allocator, c: Column) Error!Value {
             col.put("enum_variants", .{ .array = arr }) catch return error.OutOfMemory;
         }
     }
-    if (c.default_value) |dv| {
+    if (c.default_expr) |expr| {
+        col.put("default_expr", .{ .string = expr }) catch return error.OutOfMemory;
+    } else if (c.default_scalar) |dv| {
+        col.put("default_value", dv) catch return error.OutOfMemory;
+    } else if (c.default_value) |dv| {
         col.put("default_value", .{ .string = dv }) catch return error.OutOfMemory;
     }
     return Value{ .object = col };
