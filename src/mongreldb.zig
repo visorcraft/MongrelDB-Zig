@@ -169,16 +169,25 @@ pub const Client = struct {
     /// `createTable` creates a table named `name` with the given columns and
     /// returns the assigned table id.
     pub fn createTable(self: *Client, allocator: Allocator, name: []const u8, columns: []const Column) Error!i64 {
-        var col_arr = Array.initCapacity(allocator, columns.len) catch return error.OutOfMemory;
-        for (columns) |c| {
-            const col_obj = try columnToJson(allocator, c);
-            col_arr.append(col_obj) catch return error.OutOfMemory;
-        }
-        var root = ObjectMap.init(allocator);
-        root.put("name", .{ .string = name }) catch return error.OutOfMemory;
-        root.put("columns", .{ .array = col_arr }) catch return error.OutOfMemory;
+        const payload = try createTablePayload(allocator, name, columns, null);
+        return self.sendCreateTable(allocator, payload);
+    }
 
-        const resp = try self.doPost(allocator, "/kit/create_table", .{ .object = root });
+    /// Creates a table with the daemon's full constraints object, including
+    /// `constraints.checks`.
+    pub fn createTableWithConstraints(
+        self: *Client,
+        allocator: Allocator,
+        name: []const u8,
+        columns: []const Column,
+        constraints: Value,
+    ) Error!i64 {
+        const payload = try createTablePayload(allocator, name, columns, constraints);
+        return self.sendCreateTable(allocator, payload);
+    }
+
+    fn sendCreateTable(self: *Client, allocator: Allocator, payload: Value) Error!i64 {
+        const resp = try self.doPost(allocator, "/kit/create_table", payload);
         const obj = switch (resp) {
             .object => |o| o,
             else => return error.Json,
@@ -528,6 +537,27 @@ pub fn columnToJson(allocator: Allocator, c: Column) Error!Value {
         col.put("default_value", .{ .string = dv }) catch return error.OutOfMemory;
     }
     return Value{ .object = col };
+}
+
+/// `createTablePayload` builds the JSON body accepted by `/kit/create_table`.
+/// A null constraints value is omitted to preserve the old wire shape.
+pub fn createTablePayload(
+    allocator: Allocator,
+    name: []const u8,
+    columns: []const Column,
+    constraints: ?Value,
+) Error!Value {
+    var col_arr = Array.initCapacity(allocator, columns.len) catch return error.OutOfMemory;
+    for (columns) |column| {
+        col_arr.append(try columnToJson(allocator, column)) catch return error.OutOfMemory;
+    }
+    var root = ObjectMap.init(allocator);
+    root.put("name", .{ .string = name }) catch return error.OutOfMemory;
+    root.put("columns", .{ .array = col_arr }) catch return error.OutOfMemory;
+    if (constraints) |value| {
+        root.put("constraints", value) catch return error.OutOfMemory;
+    }
+    return .{ .object = root };
 }
 
 /// `urlPathEscape` percent-escapes a path segment so table names containing

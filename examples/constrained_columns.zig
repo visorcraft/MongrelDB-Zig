@@ -53,10 +53,10 @@ pub fn main() !void {
         .{ .id = 1, .name = "id", .ty = "int64", .primary_key = true },
         .{ .id = 2, .name = "title", .ty = "varchar" },
         // Enum only - writes outside the set are rejected at commit time.
-        .{ .id = 3, .name = "priority", .ty = "varchar",
+        .{ .id = 3, .name = "priority", .ty = "enum",
            .enum_variants = &.{ "low", "medium", "high" } },
         // Enum with a default applied when the cell is omitted.
-        .{ .id = 4, .name = "status", .ty = "varchar",
+        .{ .id = 4, .name = "status", .ty = "enum",
            .enum_variants = &.{ "open", "in_progress", "closed" },
            .default_value = "open" },
         // Plain default, no enum constraint. The string is coerced server-side

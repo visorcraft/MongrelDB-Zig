@@ -70,10 +70,10 @@ pub fn main() !void {
         .{ .id = 2, .name = "customer", .ty = "varchar" },
         .{ .id = 3, .name = "amount", .ty = "float64" },
         // Enum column: only the four listed values are accepted.
-        .{ .id = 4, .name = "status", .ty = "varchar",
+        .{ .id = 4, .name = "status", .ty = "enum",
            .enum_variants = &.{ "pending", "shipped", "delivered", "cancelled" } },
         // Enum column with a default applied when the cell is omitted.
-        .{ .id = 5, .name = "currency", .ty = "varchar",
+        .{ .id = 5, .name = "currency", .ty = "enum",
            .enum_variants = &.{ "USD", "EUR", "GBP" },
            .default_value = "USD" },
     });
@@ -213,19 +213,21 @@ identical payload.
 ```zig
 // Enum: only the listed values are accepted. The engine rejects writes
 // outside the set with a 409 Conflict at commit time.
-.{ .id = 4, .name = "status", .ty = "varchar",
+.{ .id = 4, .name = "status", .ty = "enum",
    .enum_variants = &.{ "pending", "shipped", "delivered", "cancelled" } },
 
 // Default: supplied as a raw string, coerced server-side per the column's
 // `ty`. Omit the cell on a `put` and the engine fills it in.
-.{ .id = 5, .name = "currency", .ty = "varchar",
+.{ .id = 5, .name = "currency", .ty = "enum",
    .enum_variants = &.{ "USD", "EUR", "GBP" },
    .default_value = "USD" },
 ```
 
 Both fields are `null` by default. An empty `enum_variants` slice is also
 omitted, so a column with no constraint is byte-identical to a pre-T5.1
-schema. See `examples/constrained_columns.zig` for a runnable walkthrough.
+schema. Use `createTableWithConstraints` when the table also needs
+`constraints.checks`, unique constraints, or foreign keys. See
+`examples/constrained_columns.zig` for a runnable walkthrough.
 
 ## User & role management
 
@@ -286,6 +288,7 @@ _ = desc;
 | `health(allocator) bool` | Check daemon health |
 | `tableNames(allocator) [][]const u8` | List table names |
 | `createTable(allocator, name, columns) i64` | Create a table; returns the table id |
+| `createTableWithConstraints(allocator, name, columns, constraints) i64` | Create a table with table constraints |
 | `dropTable(allocator, name) void` | Drop a table |
 | `count(allocator, table) i64` | Row count |
 | `put(allocator, table, cells, key) Value` | Insert a row |
