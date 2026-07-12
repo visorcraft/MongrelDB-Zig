@@ -592,7 +592,7 @@ test "asOfEpochTimeTravel" {
     });
     try testing.expectEqual(@as(f64, 1.0), switch (hist_amount) {
         .float => |f| f,
-        .integer => |i| @floatFromInt(i),
+        .integer => |i| @as(f64, @floatFromInt(i)),
         else => return error.Unexpected,
     });
 
@@ -607,7 +607,7 @@ test "asOfEpochTimeTravel" {
     const curr_amount = curr.get("amount") orelse return error.Unexpected;
     try testing.expectEqual(@as(f64, 9.0), switch (curr_amount) {
         .float => |f| f,
-        .integer => |i| @floatFromInt(i),
+        .integer => |i| @as(f64, @floatFromInt(i)),
         else => return error.Unexpected,
     });
 }

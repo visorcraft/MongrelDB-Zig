@@ -175,7 +175,10 @@ pub const Client = struct {
     fn historyRetentionRequest(self: *Client, allocator: Allocator, method: std.http.Method, payload: ?Value) Error!HistoryRetention {
         defer {
             if (payload) |p| switch (p) {
-                .object => |o| o.deinit(),
+                .object => |o| {
+                    var obj = o;
+                    obj.deinit();
+                },
                 else => {},
             };
         }
@@ -206,22 +209,6 @@ pub const Client = struct {
     pub fn earliestRetainedEpoch(self: *Client, allocator: Allocator) Error!u64 {
         const hr = try self.historyRetention(allocator);
         return hr.earliest_retained_epoch;
-    }
-
-    /// `setHistoryRetentionPayload` builds the JSON body for the
-    /// `/history/retention` setter. Exposed so wire-shape tests can assert the
-    /// on-wire format without a daemon.
-    pub fn setHistoryRetentionPayload(allocator: Allocator, epochs: u64) Error!Value {
-        var payload = ObjectMap.init(allocator);
-        errdefer payload.deinit();
-        if (epochs <= std.math.maxInt(i64)) {
-            payload.put("history_retention_epochs", .{ .integer = @intCast(epochs) }) catch return error.OutOfMemory;
-        } else {
-            // u64 values above i64 max cannot use .integer; emit as number_string.
-            const str = std.fmt.allocPrint(allocator, "{d}", .{epochs}) catch return error.OutOfMemory;
-            payload.put("history_retention_epochs", .{ .number_string = str }) catch return error.OutOfMemory;
-        }
-        return .{ .object = payload };
     }
 
     /// `tableNames` lists all table names in the database. The endpoint
@@ -663,6 +650,22 @@ pub fn createTablePayload(
         root.put("constraints", value) catch return error.OutOfMemory;
     }
     return .{ .object = root };
+}
+
+/// `setHistoryRetentionPayload` builds the JSON body for the
+/// `/history/retention` setter. Exposed at module scope so wire-shape tests
+/// can assert the on-wire format without a daemon.
+pub fn setHistoryRetentionPayload(allocator: Allocator, epochs: u64) Error!Value {
+    var payload = ObjectMap.init(allocator);
+    errdefer payload.deinit();
+    if (epochs <= std.math.maxInt(i64)) {
+        payload.put("history_retention_epochs", .{ .integer = @intCast(epochs) }) catch return error.OutOfMemory;
+    } else {
+        // u64 values above i64 max cannot use .integer; emit as number_string.
+        const str = std.fmt.allocPrint(allocator, "{d}", .{epochs}) catch return error.OutOfMemory;
+        payload.put("history_retention_epochs", .{ .number_string = str }) catch return error.OutOfMemory;
+    }
+    return .{ .object = payload };
 }
 
 /// `urlPathEscape` percent-escapes a path segment so table names containing
