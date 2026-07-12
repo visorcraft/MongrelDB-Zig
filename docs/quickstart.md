@@ -197,7 +197,7 @@ schemas that don't set them produce an identical payload.
 | Field | Type | Effect |
 |-------|------|--------|
 | `enum_variants` | `?[]const []const u8` | Restrict the column to one of the listed string values. The engine rejects writes outside the set with `error.Conflict`. |
-| `default_value` | `?[]const u8` | String default applied when the cell is omitted on a `put`. |
+| `default_value` | `?[]const u8` | String default applied when the cell is omitted on a `put`. Literal values `"now"` and `"uuid"` are sent as static strings; use `default_expr` for dynamic `now`/`uuid` defaults. |
 | `default_scalar` | `?std.json.Value` | Non-string JSON scalar default. Caller must supply the scalar type expected by the column. Sent as `default_value` and takes precedence over the string field. |
 | `default_expr` | `?[]const u8` | Dynamic `now` or `uuid`. Takes precedence over both static fields. |
 
@@ -216,13 +216,50 @@ string with a default, or an enum with a default:
 .{ .id = 5, .name = "currency", .ty = "varchar",
    .enum_variants = &.{ "USD", "EUR", "GBP" },
    .default_value = "USD" },
+
+// Integer default - sent as a JSON number, not a string.
+.{ .id = 6, .name = "retries", .ty = "int64",
+   .default_scalar = .{ .integer = 3 } },
+
+// Literal "now" / "uuid" are static strings; dynamic defaults use default_expr.
+.{ .id = 7, .name = "tag", .ty = "varchar", .default_value = "now" },
+.{ .id = 8, .name = "guid", .ty = "varchar", .default_expr = "uuid" },
 ```
 
 An empty `enum_variants` slice is also omitted, so `null` and `&[_][]const u8{}`
 produce identical wire shapes. See `examples/constrained_columns.zig` for a
 runnable walkthrough that exercises both fields end-to-end.
 
-## 7. Common pitfalls
+## 7. History retention and time travel
+
+MongrelDB keeps a durable MVCC history window. The size of the window is measured
+in epochs and controls how far back `AS OF EPOCH` queries can read. The client
+exposes three pieces of the API:
+
+- `db.historyRetention(allocator) HistoryRetention` returns the current window
+  and the earliest epoch that is still readable.
+- `db.setHistoryRetentionEpochs(allocator, epochs) HistoryRetention` changes the
+  durable window. Increasing retention cannot bring back epochs that have
+  already been garbage-collected.
+- `db.lastEpoch` is updated after every successful Kit transaction (`put`,
+  `upsert`, `deleteByPk`, and `Transaction.commit`). It holds the commit epoch
+  of the most recent write, which is a convenient pinning point for time-travel
+  reads.
+
+```zig
+// Widen the history window.
+const updated = try db.setHistoryRetentionEpochs(allocator, 10000);
+std.debug.print("window: {d}\n", .{updated.history_retention_epochs});
+std.debug.print("earliest: {d}\n", .{updated.earliest_retained_epoch});
+
+// Pin a read to the epoch of the last committed write.
+_ = try db.put(allocator, "orders", &.{.{ .id = 1, .value = mongreldb.intValue(1) }}, "");
+const stmt = try std.fmt.allocPrint(allocator, "SELECT id FROM orders AS OF EPOCH {d}", .{db.lastEpoch});
+const rows = try db.sql(allocator, stmt);
+_ = rows;
+```
+
+## 8. Common pitfalls
 
 **Using the column name instead of the column id.** Every on-wire API uses the
 numeric `id` from `createTable`, never the `name`. The query builder's `column`

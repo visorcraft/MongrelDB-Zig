@@ -519,6 +519,89 @@ test "errorTypeCarriesStatus" {
     try testing.expectError(error.NotFound, result);
 }
 
+test "historyRetentionRoundTrip" {
+    try skipIfNoClient();
+    const a = harness_alloc;
+    const c = harness_client.?;
+
+    const original = try c.historyRetention(a);
+    try testing.expect(original.history_retention_epochs > 0);
+
+    defer {
+        _ = c.setHistoryRetentionEpochs(a, original.history_retention_epochs) catch {};
+    }
+
+    _ = try c.setHistoryRetentionEpochs(a, 1000);
+    const current = try c.historyRetention(a);
+    try testing.expectEqual(@as(u64, 1000), current.history_retention_epochs);
+}
+
+test "asOfEpochTimeTravel" {
+    try skipIfNoClient();
+    const a = harness_alloc;
+    const c = harness_client.?;
+
+    const original = try c.historyRetention(a);
+    defer {
+        _ = c.setHistoryRetentionEpochs(a, original.history_retention_epochs) catch {};
+    }
+    _ = try c.setHistoryRetentionEpochs(a, 10000);
+
+    const name = try uniqueTable(a, "zig_pit");
+    try freshTable(a, name, &.{ intCol(1, "id", true), floatCol(2, "amount") });
+
+    _ = try c.put(a, name, &.{
+        .{ .id = 1, .value = mongreldb.intValue(1) },
+        .{ .id = 2, .value = mongreldb.floatValue(1.0) },
+    }, "");
+    const insert_epoch = c.lastEpoch;
+    try testing.expect(insert_epoch > 0);
+
+    _ = try c.upsert(a, name, &.{
+        .{ .id = 1, .value = mongreldb.intValue(1) },
+        .{ .id = 2, .value = mongreldb.floatValue(9.0) },
+    }, &.{
+        .{ .id = 2, .value = mongreldb.floatValue(9.0) },
+    }, "");
+
+    const hist_stmt = std.fmt.allocPrint(a, "SELECT id, amount FROM {s} AS OF EPOCH {d}", .{ name, insert_epoch }) catch return error.OutOfMemory;
+    const hist_rows = try c.sql(a, hist_stmt);
+    // SQL SELECT returns an empty slice when the server streams Arrow IPC; the
+    // JSON-path assertions below only run when JSON mode is active.
+    if (hist_rows.len == 0) return;
+    try testing.expectEqual(@as(usize, 1), hist_rows.len);
+    const hist = switch (hist_rows[0]) {
+        .object => |o| o,
+        else => return error.Unexpected,
+    };
+    const hist_id = hist.get("id") orelse return error.Unexpected;
+    const hist_amount = hist.get("amount") orelse return error.Unexpected;
+    try testing.expectEqual(@as(i64, 1), switch (hist_id) {
+        .integer => |i| i,
+        else => return error.Unexpected,
+    });
+    try testing.expectEqual(@as(f64, 1.0), switch (hist_amount) {
+        .float => |f| f,
+        .integer => |i| @floatFromInt(i),
+        else => return error.Unexpected,
+    });
+
+    const curr_stmt = std.fmt.allocPrint(a, "SELECT id, amount FROM {s}", .{name}) catch return error.OutOfMemory;
+    const curr_rows = try c.sql(a, curr_stmt);
+    if (curr_rows.len == 0) return;
+    try testing.expectEqual(@as(usize, 1), curr_rows.len);
+    const curr = switch (curr_rows[0]) {
+        .object => |o| o,
+        else => return error.Unexpected,
+    };
+    const curr_amount = curr.get("amount") orelse return error.Unexpected;
+    try testing.expectEqual(@as(f64, 9.0), switch (curr_amount) {
+        .float => |f| f,
+        .integer => |i| @floatFromInt(i),
+        else => return error.Unexpected,
+    });
+}
+
 // teardown runs after all tests via the test runner's exit handler. Zig's
 // default test runner does not expose an explicit teardown hook, so we rely on
 // the OS to reclaim the daemon process when the test process exits. The daemon

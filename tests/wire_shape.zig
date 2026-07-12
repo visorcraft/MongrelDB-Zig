@@ -166,3 +166,40 @@ test "columnToJson emits dynamic default expression" {
     try testing.expect(std.mem.indexOf(u8, s, "\"default_expr\":\"now\"") != null);
     try testing.expect(std.mem.indexOf(u8, s, "default_value") == null);
 }
+
+test "columnToJson emits literal now and uuid defaults" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const now_col = try mongreldb.columnToJson(a, .{
+        .id = 7,
+        .name = "now_literal",
+        .ty = "varchar",
+        .default_value = "now",
+    });
+    const uuid_col = try mongreldb.columnToJson(a, .{
+        .id = 8,
+        .name = "uuid_literal",
+        .ty = "varchar",
+        .default_value = "uuid",
+    });
+    const now_json = try stringifyValue(a, now_col);
+    const uuid_json = try stringifyValue(a, uuid_col);
+    defer a.free(now_json);
+    defer a.free(uuid_json);
+
+    try testing.expect(std.mem.indexOf(u8, now_json, "\"default_value\":\"now\"") != null);
+    try testing.expect(std.mem.indexOf(u8, uuid_json, "\"default_value\":\"uuid\"") != null);
+}
+
+test "setHistoryRetentionPayload shape" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+
+    const payload = try mongreldb.setHistoryRetentionPayload(a, 2048);
+    const s = try stringifyValue(a, payload);
+    defer a.free(s);
+    try testing.expect(std.mem.indexOf(u8, s, "\"history_retention_epochs\":2048") != null);
+}

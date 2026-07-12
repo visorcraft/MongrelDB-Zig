@@ -121,6 +121,9 @@ pub const Client = struct {
     token: []const u8,
     username: []const u8,
     password: []const u8,
+    /// Commit epoch of the most recent successful `/kit/txn` call, or 0 before
+    /// any such call.
+    lastEpoch: u64 = 0,
     http_client: http.Client,
 
     /// `init` returns a `Client` for the daemon at `base_url`. If `base_url`
@@ -165,21 +168,55 @@ pub const Client = struct {
     }
 
     pub fn setHistoryRetentionEpochs(self: *Client, allocator: Allocator, epochs: u64) Error!HistoryRetention {
-        var payload = ObjectMap.init(allocator);
-        defer payload.deinit();
-        payload.put("history_retention_epochs", .{ .integer = @intCast(epochs) }) catch return error.OutOfMemory;
-        return self.historyRetentionRequest(allocator, .PUT, .{ .object = payload });
+        const payload = try setHistoryRetentionPayload(allocator, epochs);
+        return self.historyRetentionRequest(allocator, .PUT, payload);
     }
 
     fn historyRetentionRequest(self: *Client, allocator: Allocator, method: std.http.Method, payload: ?Value) Error!HistoryRetention {
-        const body = try self.rawRequest(allocator, method, "/history/retention", payload);
+        defer {
+            if (payload) |p| switch (p) {
+                .object => |o| o.deinit(),
+                else => {},
+            };
+        }
+        const body = if (payload) |p| blk: {
+            var buf = std.ArrayList(u8).init(allocator);
+            defer buf.deinit();
+            json.stringify(p, .{}, buf.writer()) catch return error.Json;
+            break :blk try self.rawRequest(allocator, method, "/history/retention", buf.items);
+        } else try self.rawRequest(allocator, method, "/history/retention", null);
         defer allocator.free(body);
         const parsed = parseBody(allocator, body) catch return error.Json;
         if (parsed != .object) return error.Json;
         const h = parsed.object.get("history_retention_epochs") orelse return error.Json;
         const e = parsed.object.get("earliest_retained_epoch") orelse return error.Json;
         if (h != .integer or e != .integer) return error.Json;
+        if (h.integer < 0 or e.integer < 0) return error.Json;
         return .{ .history_retention_epochs = @intCast(h.integer), .earliest_retained_epoch = @intCast(e.integer) };
+    }
+
+    /// `historyRetentionEpochs` returns the current durable MVCC window size.
+    pub fn historyRetentionEpochs(self: *Client, allocator: Allocator) Error!u64 {
+        const hr = try self.historyRetention(allocator);
+        return hr.history_retention_epochs;
+    }
+
+    /// `earliestRetainedEpoch` returns the oldest epoch still readable through
+    /// `AS OF EPOCH` queries.
+    pub fn earliestRetainedEpoch(self: *Client, allocator: Allocator) Error!u64 {
+        const hr = try self.historyRetention(allocator);
+        return hr.earliest_retained_epoch;
+    }
+
+    /// `setHistoryRetentionPayload` builds the JSON body for the
+    /// `/history/retention` setter. Exposed so wire-shape tests can assert the
+    /// on-wire format without a daemon.
+    pub fn setHistoryRetentionPayload(allocator: Allocator, epochs: u64) Error!Value {
+        if (epochs > std.math.maxInt(i64)) return error.Query;
+        var payload = ObjectMap.init(allocator);
+        errdefer payload.deinit();
+        payload.put("history_retention_epochs", .{ .integer = @intCast(epochs) }) catch return error.OutOfMemory;
+        return .{ .object = payload };
     }
 
     /// `tableNames` lists all table names in the database. The endpoint
@@ -335,6 +372,20 @@ pub const Client = struct {
             .object => |o| o,
             else => return error.Json,
         };
+
+        // Capture the commit epoch when the server reports a committed status.
+        // Non-committed responses leave lastEpoch unchanged so a previously
+        // valid pinning point is not wiped.
+        if (obj.get("status")) |status_val| {
+            if (status_val == .string and mem.eql(u8, status_val.string, "committed")) {
+                if (obj.get("epoch")) |epoch_val| {
+                    if (epoch_val == .integer and epoch_val.integer >= 0) {
+                        self.lastEpoch = @intCast(epoch_val.integer);
+                    }
+                }
+            }
+        }
+
         const results_val = obj.get("results") orelse return Array.init(allocator);
         return switch (results_val) {
             .array => |a| a,
@@ -360,9 +411,9 @@ pub const Client = struct {
 
     /// `sql` executes a SQL statement via the `/sql` endpoint, requesting JSON
     /// output. The server returns a JSON array of row objects keyed by column
-    /// name, e.g. `[{"id": 1, "name": "Alice", "score": 95.5}]`. For statements
-    /// that yield no rows (DDL/DML), the body is empty and an empty slice is
-    /// returned.
+    /// name, e.g. `[{"id": 1, "name": "Alice", "score": 95.5}]`, when the server
+    /// honors JSON format. For statements that yield no rows (DDL/DML), Arrow IPC
+    /// streams, or any non-array JSON response, an empty slice is returned.
     pub fn sql(self: *Client, allocator: Allocator, sql_text: []const u8) Error![]Value {
         var root = ObjectMap.init(allocator);
         root.put("sql", .{ .string = sql_text }) catch return error.OutOfMemory;

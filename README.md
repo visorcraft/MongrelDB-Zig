@@ -300,6 +300,11 @@ _ = desc;
 | `sql(allocator, sql) []Value` | Execute SQL |
 | `schema(allocator) ObjectMap` | Full schema catalog |
 | `schemaFor(allocator, table) Value` | Single-table descriptor |
+| `historyRetention(allocator) HistoryRetention` | Current retention window and earliest retained epoch |
+| `historyRetentionEpochs(allocator) u64` | Current durable MVCC window size |
+| `earliestRetainedEpoch(allocator) u64` | Oldest epoch still readable via `AS OF EPOCH` |
+| `setHistoryRetentionEpochs(allocator, epochs) HistoryRetention` | Set the durable MVCC window |
+| `lastEpoch` (field) | Commit epoch of the most recent `/kit/txn` |
 | `doGet(allocator, path) Value` | Low-level GET returning a decoded JSON value |
 | `doPost(allocator, path, payload) Value` | Low-level POST with a JSON value body |
 
@@ -385,7 +390,27 @@ Contributions are welcome. Please:
 
 ## History retention
 
-Use `historyRetention`, `setHistoryRetentionEpochs`, and the returned `earliest_retained_epoch` with MongrelDB 0.48.0+.
+Use `historyRetention`, `setHistoryRetentionEpochs`, and `lastEpoch` with
+MongrelDB 0.48.0+. The retention window controls how far back `AS OF EPOCH`
+time-travel queries can read; increasing it cannot bring back history that has
+already been pruned.
+
+```zig
+// Inspect the current durable MVCC window.
+const ret = try db.historyRetention(allocator);
+std.debug.print("window: {d}\n", .{ret.history_retention_epochs});
+std.debug.print("earliest: {d}\n", .{ret.earliest_retained_epoch});
+
+// Widen the window. The response contains the updated values.
+const updated = try db.setHistoryRetentionEpochs(allocator, 10000);
+std.debug.print("window: {d}\n", .{updated.history_retention_epochs});
+
+// After a Kit transaction write, lastEpoch holds the commit epoch.
+_ = try db.put(allocator, "orders", &.{.{ .id = 1, .value = mongreldb.intValue(1) }}, "");
+const stmt = try std.fmt.allocPrint(allocator, "SELECT id FROM orders AS OF EPOCH {d}", .{db.lastEpoch});
+const rows = try db.sql(allocator, stmt);
+_ = rows;
+```
 
 ## License
 
