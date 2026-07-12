@@ -190,9 +190,9 @@ pub const Client = struct {
         if (parsed != .object) return error.Json;
         const h = parsed.object.get("history_retention_epochs") orelse return error.Json;
         const e = parsed.object.get("earliest_retained_epoch") orelse return error.Json;
-        if (h != .integer or e != .integer) return error.Json;
-        if (h.integer < 0 or e.integer < 0) return error.Json;
-        return .{ .history_retention_epochs = @intCast(h.integer), .earliest_retained_epoch = @intCast(e.integer) };
+        const hep = jsonValueToU64(h) orelse return error.Json;
+        const eep = jsonValueToU64(e) orelse return error.Json;
+        return .{ .history_retention_epochs = hep, .earliest_retained_epoch = eep };
     }
 
     /// `historyRetentionEpochs` returns the current durable MVCC window size.
@@ -212,10 +212,15 @@ pub const Client = struct {
     /// `/history/retention` setter. Exposed so wire-shape tests can assert the
     /// on-wire format without a daemon.
     pub fn setHistoryRetentionPayload(allocator: Allocator, epochs: u64) Error!Value {
-        if (epochs > std.math.maxInt(i64)) return error.Query;
         var payload = ObjectMap.init(allocator);
         errdefer payload.deinit();
-        payload.put("history_retention_epochs", .{ .integer = @intCast(epochs) }) catch return error.OutOfMemory;
+        if (epochs <= std.math.maxInt(i64)) {
+            payload.put("history_retention_epochs", .{ .integer = @intCast(epochs) }) catch return error.OutOfMemory;
+        } else {
+            // u64 values above i64 max cannot use .integer; emit as number_string.
+            const str = std.fmt.allocPrint(allocator, "{d}", .{epochs}) catch return error.OutOfMemory;
+            payload.put("history_retention_epochs", .{ .number_string = str }) catch return error.OutOfMemory;
+        }
         return .{ .object = payload };
     }
 
@@ -583,6 +588,17 @@ fn mapStatus(code: u16) Error {
 fn parseBody(allocator: Allocator, body: []const u8) Error!Value {
     if (body.len == 0) return Value{ .null = {} };
     return json.parseFromSliceLeaky(Value, allocator, body, .{}) catch error.Json;
+}
+
+/// `jsonValueToU64` converts a JSON value to u64, accepting `.integer`,
+/// `.float`, and `.number_string` representations (needed for values > i64 max).
+fn jsonValueToU64(v: Value) ?u64 {
+    return switch (v) {
+        .integer => |n| if (n >= 0) @intCast(n) else null,
+        .float => |f| if (f >= 0 and f <= @as(f64, @floatFromInt(@as(u64, std.math.maxInt(u64))))) @intFromFloat(f) else null,
+        .number_string => |s| std.fmt.parseInt(u64, s, 10) catch null,
+        else => null,
+    };
 }
 
 /// `flattenCells` converts a slice of cells to the server's flat
