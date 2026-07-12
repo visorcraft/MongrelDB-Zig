@@ -268,7 +268,12 @@ const TransportMock = struct {
     /// arena-backed allocations (recorded strings included).
     fn deinit(self: *Self, parent: std.mem.Allocator) void {
         self.stop.store(true, .release);
-        // Closing the listener from another thread unblocks accept().
+        // Closing the listener fd alone does NOT unblock a thread already
+        // parked in accept() on Linux. `shutdown` on the listening socket
+        // makes the blocked accept() return SocketNotListening, which the
+        // loop turns into a clean exit. Without this the test process hangs
+        // at thread.join() until the runner kills it.
+        std.posix.shutdown(self.listener.stream.handle, .both) catch {};
         self.listener.deinit();
         self.thread.join();
         self.arena.deinit();
@@ -317,18 +322,62 @@ const RecordedRequest = struct {
 };
 
 /// `mockLoop` is the background accept loop. It parses the HTTP/1.1 request
-/// line + headers + body by hand (bodies here are always small JSON
-/// objects, so a single read is sufficient), records the request, and writes
-/// back a canned response with an explicit Content-Length + Connection:
-/// close so the client's parser sees a well-formed message.
+/// line + headers + body by hand, records the request, and writes back a
+/// canned response with an explicit Content-Length + Connection: close so
+/// the client's parser sees a well-formed message.
+fn findContentLength(headers: []const u8) ?usize {
+    // Header names are case-insensitive; the Zig client emits lowercase
+    // `content-length:`. splitSequence walks every line including the final
+    // header (which has no trailing CRLF inside the header slice).
+    var it = std.mem.splitSequence(u8, headers, "\r\n");
+    while (it.next()) |line| {
+        if (std.ascii.indexOfIgnoreCase(line, "content-length:")) |idx| {
+            var s = idx + "content-length:".len;
+            while (s < line.len and (line[s] == ' ' or line[s] == '\t')) s += 1;
+            var e = s;
+            while (e < line.len and line[e] >= '0' and line[e] <= '9') e += 1;
+            return std.fmt.parseInt(usize, line[s..e], 10) catch null;
+        }
+    }
+    return null;
+}
+
 fn mockLoop(self: *TransportMock) void {
     var read_buf: [16 * 1024]u8 = undefined;
     while (!self.stop.load(.acquire)) {
         const conn = self.listener.accept() catch return;
         defer conn.stream.close();
-        const n = conn.stream.read(&read_buf) catch continue;
-        if (n == 0) continue;
-        const req = read_buf[0..n];
+
+        // Accumulate bytes until we have the full header block (terminated
+        // by \r\n\r\n) and, when a Content-Length is present, the body that
+        // follows. A single `read` is not enough: the kernel may deliver
+        // request line, headers, and body in separate packets on loopback.
+        var total: usize = 0;
+        var body_len: usize = 0;
+        var have_headers = false;
+        while (total < read_buf.len) {
+            const n = conn.stream.read(read_buf[total..]) catch break;
+            if (n == 0) break;
+            total += n;
+            const buf = read_buf[0..total];
+            if (!have_headers) {
+                if (std.mem.indexOf(u8, buf, "\r\n\r\n")) |idx| {
+                    have_headers = true;
+                    const headers = buf[0..idx];
+                    if (findContentLength(headers)) |cl| {
+                        body_len = cl;
+                    }
+                    const body_have = total - (idx + 4);
+                    if (body_have >= body_len) break;
+                }
+            } else {
+                const sep = std.mem.indexOf(u8, buf, "\r\n\r\n") orelse continue;
+                const body_have = total - (sep + 4);
+                if (body_have >= body_len) break;
+            }
+        }
+
+        const req = read_buf[0..total];
 
         // Parse: METHOD SP TARGET SP HTTP/1.1\r\n ...
         const line_end = std.mem.indexOf(u8, req, "\r\n") orelse req.len;

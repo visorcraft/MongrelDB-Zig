@@ -1,5 +1,6 @@
 # Zig build output
 zig-cache/
+.zig-cache/
 zig-out/
 
 # Logs (e.g. mongreldb-server output captured by tests)
