@@ -33,6 +33,7 @@ pub const QueryBuilder = struct {
     projection: Array,
     has_projection: bool = false,
     limit: ?i64 = null,
+    offset: ?i64 = null,
     truncated: bool = false,
 
     /// `init` creates a new builder for `table`.
@@ -76,6 +77,12 @@ pub const QueryBuilder = struct {
         return self;
     }
 
+    /// `offset` skips matching rows before applying the limit.
+    pub fn offset(self: *QueryBuilder, row_offset: i64) Error!*QueryBuilder {
+        self.offset = row_offset;
+        return self;
+    }
+
     /// `execute` builds the request, POSTs it to `/kit/query`, decodes the
     /// result set, records whether it was truncated, and returns the rows.
     pub fn execute(self: *QueryBuilder) Error!Array {
@@ -89,6 +96,9 @@ pub const QueryBuilder = struct {
         }
         if (self.limit) |lim| {
             root.put("limit", .{ .integer = lim }) catch return error.OutOfMemory;
+        }
+        if (self.offset) |off| {
+            root.put("offset", .{ .integer = off }) catch return error.OutOfMemory;
         }
 
         const resp = try self.client.doPost(self.allocator, "/kit/query", .{ .object = root });

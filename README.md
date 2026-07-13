@@ -315,6 +315,7 @@ _ = desc;
 | `where(type, params) *QueryBuilder` | Add a native condition (AND-ed) |
 | `projection(columnIDs) *QueryBuilder` | Set column projection |
 | `limit(rowLimit) *QueryBuilder` | Set row limit |
+| `offset(rowOffset) *QueryBuilder` | Skip matching rows before the limit |
 | `execute() Array` | Run the query; returns the rows |
 | `truncatedResult() bool` | Whether the last `execute` result hit the limit |
 
