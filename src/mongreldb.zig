@@ -589,10 +589,21 @@ fn jsonValueToU64(v: Value) ?u64 {
 }
 
 /// `flattenCells` converts a slice of cells to the server's flat
-/// `[col_id, value, col_id, value, ...]` array. Pair order is not significant.
+/// `[col_id, value, ...]` array in ascending column-id order. Stable ordering
+/// is required for idempotency keys: the server hashes the request payload,
+/// and unordered pair order would make two commits of the same cells look like
+/// a reuse mismatch.
 pub fn flattenCells(allocator: Allocator, cells: []const Cell) Error!Array {
+    const sorted = allocator.alloc(Cell, cells.len) catch return error.OutOfMemory;
+    defer allocator.free(sorted);
+    @memcpy(sorted, cells);
+    std.mem.sort(Cell, sorted, {}, struct {
+        fn less(_: void, a: Cell, b: Cell) bool {
+            return a.id < b.id;
+        }
+    }.less);
     var flat = Array.initCapacity(allocator, cells.len * 2) catch return error.OutOfMemory;
-    for (cells) |c| {
+    for (sorted) |c| {
         flat.append(.{ .integer = c.id }) catch return error.OutOfMemory;
         flat.append(c.value) catch return error.OutOfMemory;
     }
