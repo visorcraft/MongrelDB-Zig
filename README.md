@@ -290,6 +290,7 @@ _ = desc;
 | `tableNames(allocator) [][]const u8` | List table names |
 | `createTable(allocator, name, columns) i64` | Create a table; returns the table id |
 | `createTableWithConstraints(allocator, name, columns, constraints) i64` | Create a table with table constraints |
+| `createTableWithSchema(allocator, name, columns, constraints, indexes) i64` | Create a table with all six index kinds and options |
 | `dropTable(allocator, name) void` | Drop a table |
 | `count(allocator, table) i64` | Row count |
 | `put(allocator, table, cells, key) Value` | Insert a row |

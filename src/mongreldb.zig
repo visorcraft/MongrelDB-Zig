@@ -80,6 +80,8 @@ pub const Column = struct {
     /// Dynamic default expression (`"now"` or `"uuid"`). Takes precedence
     /// over both static default fields.
     default_expr: ?[]const u8 = null,
+    /// Portable EmbeddingSource JSON value. Null means application supplied.
+    embedding_source: ?Value = null,
 };
 
 /// `Error` is the typed error set returned by every client operation. HTTP
@@ -245,6 +247,19 @@ pub const Client = struct {
         constraints: Value,
     ) Error!i64 {
         const payload = try createTablePayload(allocator, name, columns, constraints);
+        return self.sendCreateTable(allocator, payload);
+    }
+
+    /// Creates a table with constraints and full secondary-index definitions.
+    pub fn createTableWithSchema(
+        self: *Client,
+        allocator: Allocator,
+        name: []const u8,
+        columns: []const Column,
+        constraints: ?Value,
+        indexes: Value,
+    ) Error!i64 {
+        const payload = try createTablePayloadWithIndexes(allocator, name, columns, constraints, indexes);
         return self.sendCreateTable(allocator, payload);
     }
 
@@ -639,6 +654,9 @@ pub fn columnToJson(allocator: Allocator, c: Column) Error!Value {
     } else if (c.default_value) |dv| {
         col.put("default_value", .{ .string = dv }) catch return error.OutOfMemory;
     }
+    if (c.embedding_source) |source| {
+        col.put("embedding_source", source) catch return error.OutOfMemory;
+    }
     return Value{ .object = col };
 }
 
@@ -660,6 +678,23 @@ pub fn createTablePayload(
     if (constraints) |value| {
         root.put("constraints", value) catch return error.OutOfMemory;
     }
+    return .{ .object = root };
+}
+
+/// Full create-table payload including the native indexes array.
+pub fn createTablePayloadWithIndexes(
+    allocator: Allocator,
+    name: []const u8,
+    columns: []const Column,
+    constraints: ?Value,
+    indexes: Value,
+) Error!Value {
+    const payload = try createTablePayload(allocator, name, columns, constraints);
+    var root = switch (payload) {
+        .object => |object| object,
+        else => return error.Json,
+    };
+    root.put("indexes", indexes) catch return error.OutOfMemory;
     return .{ .object = root };
 }
 
