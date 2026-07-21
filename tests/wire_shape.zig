@@ -71,6 +71,24 @@ test "createTablePayload emits table checks" {
     try testing.expect(std.mem.indexOf(u8, s, "\"IsNotNull\":1") != null);
 }
 
+test "createTablePayload preserves ANN backend options" {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const a = arena.allocator();
+    var parsed = try std.json.parseFromSlice(Value, a,
+        "[{\"name\":\"ann\",\"column_id\":2,\"kind\":\"ann\",\"options\":{\"ann\":{\"algorithm\":\"diskann\",\"quantization\":\"dense\",\"diskann\":{\"r\":64,\"l\":128,\"beam_width\":8,\"alpha\":120}}}}]",
+        .{});
+    defer parsed.deinit();
+    const payload = try mongreldb.createTablePayloadWithIndexes(
+        a, "vectors", &[_]Column{}, null, parsed.value,
+    );
+    const s = try stringifyValue(a, payload);
+    defer a.free(s);
+    try testing.expect(std.mem.indexOf(u8, s, "\"algorithm\":\"diskann\"") != null);
+    try testing.expect(std.mem.indexOf(u8, s, "\"quantization\":\"dense\"") != null);
+    try testing.expect(std.mem.indexOf(u8, s, "\"beam_width\":8") != null);
+}
+
 test "columnToJson omits absent enum_variants and default_value" {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
