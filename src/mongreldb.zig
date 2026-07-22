@@ -39,6 +39,99 @@ pub const max_response_bytes: usize = 268435456;
 /// untyped payloads returned by the daemon (row data, schema descriptors, etc.).
 pub const Value = json.Value;
 
+/// Structural HLC from durable recovery (0.64+).
+pub const CommitHlc = struct {
+    physical_micros: u64,
+    logical: u32 = 0,
+    node_tiebreaker: u32 = 0,
+};
+
+/// Parse nested `last_commit_hlc` object; null when physical_micros is missing.
+pub fn parseCommitHlc(raw: Value) ?CommitHlc {
+    const obj = switch (raw) {
+        .object => |o| o,
+        else => return null,
+    };
+    const phys_v = obj.get("physical_micros") orelse return null;
+    const phys: u64 = switch (phys_v) {
+        .integer => |i| @intCast(i),
+        else => return null,
+    };
+    var logical: u32 = 0;
+    var node: u32 = 0;
+    if (obj.get("logical")) |lv| {
+        logical = switch (lv) {
+            .integer => |i| @intCast(i),
+            else => 0,
+        };
+    }
+    if (obj.get("node_tiebreaker")) |nv| {
+        node = switch (nv) {
+            .integer => |i| @intCast(i),
+            else => 0,
+        };
+    }
+    return .{ .physical_micros = phys, .logical = logical, .node_tiebreaker = node };
+}
+
+/// Prefer durable → outcome → top-level last_commit_hlc on a query-status object.
+pub fn commitHlcFromStatus(status: Value) ?CommitHlc {
+    const root = switch (status) {
+        .object => |o| o,
+        else => return null,
+    };
+    if (root.get("durable")) |d| {
+        if (switch (d) {
+            .object => |o| o.get("last_commit_hlc"),
+            else => null,
+        }) |hlc| {
+            if (parseCommitHlc(hlc)) |parsed| return parsed;
+        }
+    }
+    if (root.get("outcome")) |o| {
+        if (switch (o) {
+            .object => |oo| oo.get("last_commit_hlc"),
+            else => null,
+        }) |hlc| {
+            if (parseCommitHlc(hlc)) |parsed| return parsed;
+        }
+    }
+    if (root.get("last_commit_hlc")) |hlc| {
+        return parseCommitHlc(hlc);
+    }
+    return null;
+}
+
+/// Prefer nested serialization_state / serialization on query status.
+pub fn serializationStateFromStatus(status: Value) []const u8 {
+    const root = switch (status) {
+        .object => |o| o,
+        else => return "",
+    };
+    inline for (.{ "durable", "outcome" }) |key| {
+        if (root.get(key)) |nest| {
+            if (switch (nest) {
+                .object => |o| o,
+                else => null,
+            }) |obj| {
+                if (obj.get("serialization_state")) |s| {
+                    switch (s) {
+                        .string => |str| if (str.len > 0) return str,
+                        else => {},
+                    }
+                }
+                if (obj.get("serialization")) |s| {
+                    switch (s) {
+                        .string => |str| if (str.len > 0) return str,
+                        else => {},
+                    }
+                }
+            }
+        }
+    }
+    return "";
+}
+
 /// `ObjectMap` is a JSON object (`std.StringArrayHashMap(Value)`).
 pub const ObjectMap = json.ObjectMap;
 
