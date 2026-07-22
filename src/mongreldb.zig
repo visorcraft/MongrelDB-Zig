@@ -421,6 +421,44 @@ pub const Client = struct {
     /// name, e.g. `[{"id": 1, "name": "Alice", "score": 95.5}]`, when the server
     /// honors JSON format. For statements that yield no rows (DDL/DML), Arrow IPC
     /// streams, or any non-array JSON response, an empty slice is returned.
+    /// Text → embed → ANN retrieve (POST /kit/retrieve_text, 0.64+).
+    pub fn retrieveText(
+        self: *Client,
+        allocator: Allocator,
+        table: []const u8,
+        embedding_column: i64,
+        text: []const u8,
+        k: ?i64,
+    ) Error!Value {
+        if (table.len == 0) return error.Query;
+        if (text.len == 0) return error.Query;
+        var root = ObjectMap.init(allocator);
+        errdefer root.deinit();
+        try root.put("table", .{ .string = table });
+        try root.put("embedding_column", .{ .integer = embedding_column });
+        try root.put("text", .{ .string = text });
+        if (k) |kv| try root.put("k", .{ .integer = kv });
+        return self.doPost(allocator, "/kit/retrieve_text", .{ .object = root });
+    }
+
+    /// Retained SQL status for durable recovery (GET /queries/{query_id}).
+    pub fn queryStatus(self: *Client, allocator: Allocator, query_id: []const u8) Error!Value {
+        if (query_id.len == 0) return error.Query;
+        const path = try std.fmt.allocPrint(allocator, "/queries/{s}", .{urlPathEscape(query_id)});
+        defer allocator.free(path);
+        return self.doGet(allocator, path);
+    }
+
+    /// Request cancellation of a running SQL query.
+    pub fn cancelQuery(self: *Client, allocator: Allocator, query_id: []const u8) Error!Value {
+        if (query_id.len == 0) return error.Query;
+        const path = try std.fmt.allocPrint(allocator, "/queries/{s}/cancel", .{urlPathEscape(query_id)});
+        defer allocator.free(path);
+        var empty = ObjectMap.init(allocator);
+        errdefer empty.deinit();
+        return self.doPost(allocator, path, .{ .object = empty });
+    }
+
     pub fn sql(self: *Client, allocator: Allocator, sql_text: []const u8) Error![]Value {
         var root = ObjectMap.init(allocator);
         root.put("sql", .{ .string = sql_text }) catch return error.OutOfMemory;
