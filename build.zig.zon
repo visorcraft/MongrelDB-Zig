@@ -1,6 +1,6 @@
 .{
     .name = "mongreldb",
-    .version = "0.64.5",
+    .version = "0.64.6",
     .fingerprint = 0x6d6f6e6772656c64,
     .minimum_zig_version = "0.13.0",
     .dependencies = .{},
